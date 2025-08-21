@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, X, Printer, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { useScaleReader } from '../../hooks/useScaleReader';
 // Tipos por roupa foram removidos do fluxo; seleção é por cliente via modal
 
 interface WeighingScreenProps {
@@ -40,19 +41,21 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   const [page, setPage] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
   const [osQuery, setOsQuery] = useState('');
-  const [weight, setWeight] = useState(0);
+  const { weight, isStable, connected, setExternalWeight, zero } = useScaleReader({ mode: 'mock' });
   const [rfidTags, setRfidTags] = useState<RFIDTag[]>([]);
   const [cageTare, setCageTare] = useState(0);
   const [cageBarcode, setCageBarcode] = useState('');
   const [weighings, setWeighings] = useState<WeighingEntry[]>([]);
-  const [isStable, setIsStable] = useState(false);
-  const stableTimer = useRef<number | null>(null);
+  // Timer removido; estabilidade vem do hook de balança
+  // const stableTimer = useRef<number | null>(null);
   // Estado para controlar abas no painel esquerdo (layout semelhante ao print)
   const [activeTab, setActiveTab] = useState<'gaiolas' | 'quantidade' | 'pesagem'>('pesagem');
   // Relógio e status
   const [now, setNow] = useState<Date>(new Date());
   const [antennaOnline] = useState<boolean>(true);
-  const [scaleOnline] = useState<boolean>(true);
+  // Tipo de roupa e modal
+  const [selectedType, setSelectedType] = useState<'MISTO' | 'LENÇÓIS' | 'TOALHAS' | 'COBERTORES'>('MISTO');
+  const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
 
   // Tipos removidos neste layout; fluxo é por cliente/OS
 
@@ -92,17 +95,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     setCageTare(typeof found === 'number' ? found : 0);
   };
 
-  // Detecta estabilidade do peso: se não muda por 1.5s consideramos estável
-  useEffect(() => {
-    setIsStable(false);
-    if (stableTimer.current) window.clearTimeout(stableTimer.current);
-    if (weight > 0) {
-      stableTimer.current = window.setTimeout(() => setIsStable(true), 1500);
-    }
-    return () => {
-      if (stableTimer.current) window.clearTimeout(stableTimer.current);
-    };
-  }, [weight]);
+  // Estabilidade agora vem do hook da balança
 
   // Atualiza o relógio a cada segundo para refletir o cabeçalho da tela clássica
   useEffect(() => {
@@ -115,7 +108,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     const entry: WeighingEntry = {
       id: `W${Date.now()}`,
       cageId: cageBarcode || 'SEM-CODIGO',
-      clothingType: 'MISTO',
+      clothingType: selectedType,
       tare: cageTare,
       total: weight,
       net: Math.max(0, weight - cageTare),
@@ -124,9 +117,9 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     };
     setWeighings(prev => [entry, ...prev]);
     // Reseta para próxima pesagem
-    setWeight(0);
+    zero();
     setRfidTags([]);
-    setIsStable(false);
+    // estabilidade é recalculada pelo hook
     setCageBarcode('');
     // Mantém a tara para próxima leitura da mesma gaiola somente se código for o mesmo
   };
@@ -219,8 +212,14 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-emerald-400 font-mono text-4xl px-8 py-3 rounded-2xl shadow-2xl border-4 border-emerald-300">
                     {weight.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                   </div>
-                  <Button variant="secondary" size="sm" className="min-w-[100px] bg-white/80">MISTO</Button>
-                  <Button variant="secondary" size="sm" icon={ArrowLeft} onClick={() => setWeight(Math.max(0, weight - 0.5))} className="bg-white/80">
+                  {/* Botão de tipo de roupa com modal */}
+                  <button
+                    onClick={() => setShowTypeModal(true)}
+                    className="px-4 py-2 min-w-[100px] rounded-xl bg-white/80 border border-gray-200 font-semibold hover:bg-white"
+                  >
+                    {selectedType}
+                  </button>
+                  <Button variant="secondary" size="sm" icon={ArrowLeft} onClick={() => setExternalWeight(Math.max(0, weight - 0.5))} className="bg-white/80">
                     -
                   </Button>
                   <div className="text-gray-700">Peça: <span className="font-bold">{rfidTags.length}</span></div>
@@ -233,7 +232,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   </div>
                   <div className="flex items-center gap-2 bg-white/60 rounded-full px-3 py-1 border border-white/20">
                     <span className="text-sm text-gray-700">Balança</span>
-                    <span className={`w-3 h-3 rounded-full ${scaleOnline ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                    <span className={`w-3 h-3 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                   </div>
                 </div>
               </div>
@@ -442,7 +441,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                 <Button
                   onClick={() => {
                     setStep('select-client');
-                    setWeight(0);
+                    zero();
                     setRfidTags([]);
                   }}
                   variant="secondary"
@@ -463,6 +462,35 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
           </div>
         )}
       </main>
+
+      {/* Modal de Tipo de Roupa */}
+      {showTypeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowTypeModal(false)}></div>
+          <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-800">Selecionar Tipo de Roupa</h3>
+              <button onClick={() => setShowTypeModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-3">
+              {(['MISTO','LENÇÓIS','TOALHAS','COBERTORES'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => { setSelectedType(type); setShowTypeModal(false); }}
+                  className={`px-4 py-3 rounded-xl border text-lg font-semibold ${selectedType === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/80 text-gray-800 border-gray-200 hover:bg-white'}`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <Button variant="secondary" size="sm" onClick={() => setShowTypeModal(false)}>Fechar</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Seleção de Cliente */}
       {step === 'select-client' && (
