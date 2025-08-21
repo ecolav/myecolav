@@ -41,7 +41,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   const [page, setPage] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
   const [osQuery, setOsQuery] = useState('');
-  const { weight, isStable, connected, setExternalWeight, zero } = useScaleReader({ mode: 'mock' });
+  const { weight, isStable, connected, zero } = useScaleReader({ mode: 'mock' });
   const [rfidTags, setRfidTags] = useState<RFIDTag[]>([]);
   const [cageTare, setCageTare] = useState(0);
   const [cageBarcode, setCageBarcode] = useState('');
@@ -219,9 +219,6 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   >
                     {selectedType}
                   </button>
-                  <Button variant="secondary" size="sm" icon={ArrowLeft} onClick={() => setExternalWeight(Math.max(0, weight - 0.5))} className="bg-white/80">
-                    -
-                  </Button>
                   <div className="text-gray-700">Peça: <span className="font-bold">{rfidTags.length}</span></div>
                 </div>
 
