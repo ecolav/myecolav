@@ -3,6 +3,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { DashboardScreen } from './components/screens/DashboardScreen';
 import { WeighingScreen } from './components/screens/WeighingScreen';
 import { RFIDScreen } from './components/screens/RFIDScreen';
+import { SettingsScreen } from './components/screens/SettingsScreen';
 import { User } from './types';
 
 function App() {
@@ -50,20 +51,7 @@ function App() {
         );
       
       case 'settings':
-        return (
-          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-800 mb-4">Configurações</h1>
-              <p className="text-xl text-gray-600 mb-8">Tela em desenvolvimento</p>
-              <button
-                onClick={goBack}
-                className="bg-blue-800 text-white px-8 py-4 rounded-xl text-xl font-bold hover:bg-blue-900"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        );
+        return <SettingsScreen onBack={goBack} />;
       
       case 'users':
         return (
