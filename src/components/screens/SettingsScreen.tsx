@@ -10,6 +10,35 @@ interface SettingsScreenProps {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const { settings, setSettings } = useSettings();
   const [tab, setTab] = React.useState<'balanca' | 'impressoras' | 'rfid' | 'servidor'>('balanca');
+  const [testMsg, setTestMsg] = React.useState<Record<string, string>>({});
+
+  const testScale = () => {
+    const weight = (Math.random() * 5 + 0.5).toFixed(2);
+    setTestMsg(prev => ({ ...prev, balanca: `OK • peso simulado ${weight} kg (${settings.scale.mode.toUpperCase()})` }));
+  };
+
+  const testPrinter = () => {
+    setTestMsg(prev => ({ ...prev, impressoras: `Cupom de teste enviado (simulado) para ${settings.printer.defaultPrinter || 'Padrão do sistema'}` }));
+  };
+
+  const testRfid = () => {
+    const types = ['MISTO', 'LENÇÓIS', 'TOALHAS', 'COBERTORES'];
+    const counts = types.map(() => Math.floor(Math.random() * 5));
+    const total = counts.reduce((a, b) => a + b, 0);
+    setTestMsg(prev => ({ ...prev, rfid: `Leitura simulada: ${total} peças (${types.map((t, i) => `${t}:${counts[i]}`).join(', ')})` }));
+  };
+
+  const testServer = async () => {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 3000);
+      await fetch((settings.server.baseUrl || '').replace(/\/$/, '') + '/ping', { signal: controller.signal, method: 'GET' });
+      clearTimeout(id);
+      setTestMsg(prev => ({ ...prev, servidor: 'Conexão OK (GET /ping)' }));
+    } catch {
+      setTestMsg(prev => ({ ...prev, servidor: 'Falha ao conectar (GET /ping)' }));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6 md:p-8">
@@ -43,7 +72,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
         <div className="md:col-span-4 space-y-6">
           {tab === 'balanca' && (
             <Card>
-              <h2 className="text-xl font-bold mb-4">Balança</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Balança</h2>
+                <div className="flex items-center gap-3">
+                  {testMsg.balanca && <span className="text-sm text-gray-600">{testMsg.balanca}</span>}
+                  <Button variant="secondary" size="sm" onClick={testScale}>Testar</Button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="text-sm font-semibold">Modo</label>
@@ -81,7 +116,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
 
           {tab === 'impressoras' && (
             <Card>
-              <h2 className="text-xl font-bold mb-4">Impressoras</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Impressoras</h2>
+                <div className="flex items-center gap-3">
+                  {testMsg.impressoras && <span className="text-sm text-gray-600">{testMsg.impressoras}</span>}
+                  <Button variant="secondary" size="sm" onClick={testPrinter}>Testar</Button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-semibold">Padrão</label>
@@ -104,7 +145,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
 
           {tab === 'rfid' && (
             <Card>
-              <h2 className="text-xl font-bold mb-4">Leitor RFID</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Leitor RFID</h2>
+                <div className="flex items-center gap-3">
+                  {testMsg.rfid && <span className="text-sm text-gray-600">{testMsg.rfid}</span>}
+                  <Button variant="secondary" size="sm" onClick={testRfid}>Testar</Button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="text-sm font-semibold">Acesso</label>
@@ -149,7 +196,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
 
           {tab === 'servidor' && (
             <Card>
-              <h2 className="text-xl font-bold mb-4">Servidor</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Servidor</h2>
+                <div className="flex items-center gap-3">
+                  {testMsg.servidor && <span className="text-sm text-gray-600">{testMsg.servidor}</span>}
+                  <Button variant="secondary" size="sm" onClick={testServer}>Testar</Button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-semibold">Base URL</label>
