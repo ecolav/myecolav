@@ -21,6 +21,7 @@ interface ServiceOrder {
   collectDate: string;
   deliveryDate: string;
   priority: 'normal' | 'alta';
+  plannedKg: number; // Adicionado para controlar o peso planejado
 }
 
 interface WeighingEntry {
@@ -43,6 +44,10 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   const [osQuery, setOsQuery] = useState('');
   const { weight, isStable, connected, zero } = useScaleReader({ mode: 'mock' });
   const [rfidTags, setRfidTags] = useState<RFIDTag[]>([]);
+  // Leitura RFID por contagem agregada por tipo
+  const [isRfidReading, setIsRfidReading] = useState<boolean>(false);
+  const [rfidCounts, setRfidCounts] = useState<Record<string, number>>({});
+  const rfidTotal = Object.values(rfidCounts).reduce((a, b) => a + b, 0);
   const [cageTare, setCageTare] = useState(0);
   const [cageBarcode, setCageBarcode] = useState('');
   const [weighings, setWeighings] = useState<WeighingEntry[]>([]);
@@ -56,6 +61,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   // Tipo de roupa e modal
   const [selectedType, setSelectedType] = useState<'MISTO' | 'LENÇÓIS' | 'TOALHAS' | 'COBERTORES'>('MISTO');
   const [showTypeModal, setShowTypeModal] = useState<boolean>(false);
+  // Controles de simulação foram removidos após validação
 
   // Tipos removidos neste layout; fluxo é por cliente/OS
 
@@ -69,15 +75,16 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   // Ordens de serviço abertas simuladas por cliente
   const openOrdersByClient: Record<string, ServiceOrder[]> = {
     'cli-001': [
-      { id: 'os-1001', title: 'Coleta diária', collectDate: '2025-08-21', deliveryDate: '2025-08-23', priority: 'normal' },
-      { id: 'os-1002', title: 'Extra UTIs', collectDate: '2025-08-21', deliveryDate: '2025-08-22', priority: 'alta' }
+      { id: 'os-1001', title: 'Coleta diária', collectDate: '2025-08-21', deliveryDate: '2025-08-23', priority: 'normal', plannedKg: 100 },
+      { id: 'os-1002', title: 'Extra UTIs', collectDate: '2025-08-21', deliveryDate: '2025-08-22', priority: 'alta', plannedKg: 50 }
     ],
     'cli-002': [
-      { id: 'os-2001', title: 'Turno A', collectDate: '2025-08-21', deliveryDate: '2025-08-22', priority: 'normal' }
+      { id: 'os-2001', title: 'Turno A', collectDate: '2025-08-21', deliveryDate: '2025-08-22', priority: 'normal', plannedKg: 75 },
+      { id: 'os-2002', title: 'Turno B', collectDate: '2025-08-21', deliveryDate: '2025-08-22', priority: 'normal', plannedKg: 80 }
     ],
     'cli-003': [],
     'cli-004': [
-      { id: 'os-4001', title: 'Hotelaria', collectDate: '2025-08-20', deliveryDate: '2025-08-22', priority: 'normal' },
+      { id: 'os-4001', title: 'Hotelaria', collectDate: '2025-08-20', deliveryDate: '2025-08-22', priority: 'normal', plannedKg: 120 },
     ]
   };
 
@@ -113,7 +120,20 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     setShowTareKeypad(false);
   };
 
+  // Helpers de simulação removidos
+
   // Estabilidade agora vem do hook da balança
+
+  // Simulação simples de leitura RFID enquanto a integração real não chega
+  useEffect(() => {
+    if (!isRfidReading) return;
+    const types: Array<'MISTO' | 'LENÇÓIS' | 'TOALHAS' | 'COBERTORES'> = ['MISTO', 'LENÇÓIS', 'TOALHAS', 'COBERTORES'];
+    const interval = window.setInterval(() => {
+      const t = types[Math.floor(Math.random() * types.length)];
+      setRfidCounts(prev => ({ ...prev, [t]: (prev[t] || 0) + 1 }));
+    }, 900);
+    return () => window.clearInterval(interval);
+  }, [isRfidReading]);
 
   // Atualiza o relógio a cada segundo para refletir o cabeçalho da tela clássica
   useEffect(() => {
@@ -130,13 +150,15 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
       tare: cageTare,
       total: weight,
       net: Math.max(0, weight - cageTare),
-      pieceCount: rfidTags.length,
+      pieceCount: rfidTotal,
       timestamp: new Date(),
     };
     setWeighings(prev => [entry, ...prev]);
     // Reseta para próxima pesagem
     zero();
     setRfidTags([]);
+    setIsRfidReading(false);
+    setRfidCounts({});
     // estabilidade é recalculada pelo hook
     setCageBarcode('');
     // Mantém a tara para próxima leitura da mesma gaiola somente se código for o mesmo
@@ -195,6 +217,13 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     acc[w.clothingType] = (acc[w.clothingType] || 0) + w.pieceCount;
     return acc;
   }, {} as Record<string, number>);
+  const totalPiecesAllCages = weighings.reduce((sum, w) => sum + w.pieceCount, 0);
+
+  // Estados para o novo rodapé
+  const [rfidInvalidClients, setRfidInvalidClients] = useState(0);
+  const [rfidUnregistered, setRfidUnregistered] = useState(0);
+
+  const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -237,7 +266,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   >
                     {selectedType}
                   </button>
-                  <div className="text-gray-700">Peça: <span className="font-bold">{rfidTags.length}</span></div>
+                  <div className="text-gray-700">Peça: <span className="font-bold">{Object.values(rfidCounts || {}).reduce((a: number, b: number) => a + b, 0)}</span></div>
                 </div>
 
                 <div className="flex items-center gap-6">
@@ -249,8 +278,8 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                     <span className="text-sm text-gray-700">Balança</span>
                     <span className={`w-3 h-3 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                   </div>
-                      </div>
-                    </div>
+                </div>
+              </div>
             </Card>
 
             {/* Conteúdo em duas colunas: abas à esquerda e tabela à direita */}
@@ -272,19 +301,62 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   </div>
 
                   {activeTab === 'gaiolas' && (
-                    <div className="h-64 flex items-center justify-center text-gray-500">Não há valores</div>
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-800">Leitura RFID por Gaiola</h3>
+                        {isRfidReading ? (
+                          <Button variant="danger" size="sm" onClick={() => setIsRfidReading(false)}>Parar</Button>
+                        ) : (
+                          <Button variant="success" size="sm" onClick={() => setIsRfidReading(true)}>Iniciar</Button>
+                        )}
+                      </div>
+                      <div className="border rounded-lg overflow-hidden">
+                        <table className="w-full text-left">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2">Tipo de roupa</th>
+                              <th className="px-3 py-2">Quantidade</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(['MISTO','LENÇÓIS','TOALHAS','COBERTORES'] as const).map((t) => (
+                              <tr key={t} className="border-t">
+                                <td className="px-3 py-2">{t}</td>
+                                <td className="px-3 py-2 font-semibold">{rfidCounts[t] || 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 text-right text-sm text-gray-700">Total lidas: <span className="font-bold">{Object.values(rfidCounts || {}).reduce((a: number, b: number) => a + b, 0)}</span></div>
+                    </div>
                   )}
                   {activeTab === 'quantidade' && (
-                    <div className="h-64 overflow-y-auto">
-                      {Object.keys(typeSummary).length === 0 && (
-                        <div className="h-full flex items-center justify-center text-gray-500">Não há valores</div>
-                      )}
-                      {Object.entries(typeSummary).map(([type, count]) => (
-                        <div key={type} className="flex items-center justify-between border-b py-2">
-                          <span className="text-gray-700">{type}</span>
-                          <span className="font-bold">{count}</span>
-                        </div>
-                      ))}
+                    <div>
+                      <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2">Tipo de roupa</th>
+                              <th className="px-3 py-2">Quantidade</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.keys(typeSummary).length === 0 && (
+                              <tr>
+                                <td className="px-3 py-4 text-gray-500" colSpan={2}>Não há valores</td>
+                              </tr>
+                            )}
+                            {Object.entries(typeSummary).map(([type, count]) => (
+                              <tr key={type} className="border-t">
+                                <td className="px-3 py-2">{type}</td>
+                                <td className="px-3 py-2 font-semibold">{count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 text-right text-sm text-gray-700">Total de peças: <span className="font-bold">{totalPiecesAllCages}</span></div>
                     </div>
                   )}
                   {activeTab === 'pesagem' && (
@@ -307,14 +379,15 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                         className="w-full px-3 py-2 border rounded cursor-pointer"
                         readOnly={!cageBarcode}
                       />
-                  <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <span className={`px-2 py-1 rounded ${isStable ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{isStable ? 'Peso estável' : 'Aguardando...'}</span>
                         <Button onClick={registerWeighing} variant="success" size="sm" disabled={!isStable || weight <= 0}>Registrar</Button>
                       </div>
-                </div>
+                      
+                    </div>
                   )}
-              </Card>
-            </div>
+                </Card>
+              </div>
 
               <div className="lg:col-span-2">
               <Card>
@@ -364,19 +437,19 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
             {/* Rodapé com totais e ações */}
             <Card>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-                <div className="text-lg">Total lidas: <span className="font-bold">{rfidTags.length}</span></div>
+                <div className="text-lg">Total lidas: <span className="font-bold">{Object.values(rfidCounts || {}).reduce((a: number, b: number) => a + b, 0)}</span></div>
                 <div className="text-sm text-gray-600">
-                  <div>Total cliente inválido:</div>
-                  <div>Total sem cadastro:</div>
+                  <div>Total cliente inválido: <span className="font-semibold">{rfidInvalidClients}</span></div>
+                  <div>Total sem cadastro: <span className="font-semibold">{rfidUnregistered}</span></div>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
                     {weighings.reduce((a, b) => a + b.net, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg
                   </div>
+                  <div className="text-sm text-gray-600">Col: <span className="font-semibold">{(selectedOrder?.plannedKg || weighings.reduce((a,b)=>a+b.net,0)).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Kg</span> • Pronto: <span className="font-semibold">{((weighings.reduce((a,b)=>a+b.net,0) / ((selectedOrder?.plannedKg || weighings.reduce((a,b)=>a+b.net,0)) || 1)) * 100).toFixed(1)}%</span></div>
                 </div>
                 <div className="flex items-center justify-end gap-3">
-                  <Button variant="secondary" size="md" className="bg-white/80">Iniciar</Button>
-                  <Button variant="success" size="md">Finalizar</Button>
+                  <Button variant="success" size="md" onClick={() => setShowFinishModal(true)}>Finalizar</Button>
                 </div>
                 </div>
               </Card>
@@ -411,6 +484,51 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                 <div className="flex items-center justify-between gap-3 mt-4">
                   <Button variant="secondary" size="sm" onClick={() => setKeypadValue('')}>Limpar</Button>
                   <Button variant="success" size="sm" onClick={applyKeypadValue}>Aplicar</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Finalizar OS / Imprimir */}
+        {showFinishModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowFinishModal(false)}></div>
+            <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800">Finalizar OS</h3>
+                <button onClick={() => setShowFinishModal(false)} className="text-gray-500 hover:text-gray-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="text-gray-700">Deseja imprimir o cupom desta operação?</div>
+                <div className="bg-gray-50 rounded-xl p-4 text-sm">
+                  <div><strong>Cliente:</strong> {selectedClient?.name || '-'}</div>
+                  <div><strong>OS:</strong> {selectedOrder?.id || '-'} • {selectedOrder?.title || '-'}</div>
+                  <div><strong>Coleta:</strong> {selectedOrder?.collectDate || '-'} • <strong>Entrega:</strong> {selectedOrder?.deliveryDate || '-'}</div>
+                  <div><strong>Registrado:</strong> {weighings.reduce((a,b)=>a+b.net,0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg • <strong>Peças:</strong> {weighings.reduce((a,b)=>a+b.pieceCount,0)}</div>
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <Button variant="secondary" size="md" onClick={() => {
+                    // Completar sem imprimir
+                    setIsRfidReading(false);
+                    setRfidCounts({});
+                    setRfidInvalidClients(0);
+                    setRfidUnregistered(0);
+                    setShowFinishModal(false);
+                    setStep('select-client');
+                  }}>Completar</Button>
+                  <Button variant="success" size="md" onClick={() => {
+                    // Placeholder: imprimir
+                    window.alert('Imprimindo cupom...');
+                    setIsRfidReading(false);
+                    setRfidCounts({});
+                    setRfidInvalidClients(0);
+                    setRfidUnregistered(0);
+                    setShowFinishModal(false);
+                    setStep('select-client');
+                  }}>Imprimir cupom</Button>
                 </div>
               </div>
             </div>
