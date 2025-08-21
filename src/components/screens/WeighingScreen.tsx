@@ -95,6 +95,24 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     setCageTare(typeof found === 'number' ? found : 0);
   };
 
+  // Teclado numérico para preenchimento manual da tara
+  const [showTareKeypad, setShowTareKeypad] = useState<boolean>(false);
+  const [keypadValue, setKeypadValue] = useState<string>('');
+
+  const openTareKeypadIfNeeded = () => {
+    if (!cageBarcode) {
+      setKeypadValue(cageTare ? String(cageTare).replace('.', ',') : '');
+      setShowTareKeypad(true);
+    }
+  };
+
+  const applyKeypadValue = () => {
+    const normalized = keypadValue.replace(',', '.');
+    const parsed = parseFloat(normalized);
+    if (!Number.isNaN(parsed)) setCageTare(parsed);
+    setShowTareKeypad(false);
+  };
+
   // Estabilidade agora vem do hook da balança
 
   // Atualiza o relógio a cada segundo para refletir o cabeçalho da tela clássica
@@ -185,8 +203,8 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button onClick={onBack} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white/60">
-              Voltar
-            </Button>
+            Voltar
+          </Button>
             <h1 className="text-2xl md:text-3xl font-bold tracking-wide bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
               {selectedClient ? selectedClient.name : 'Cliente não selecionado'}{selectedOrder ? ` - ${selectedOrder.collectDate}` : ''}
             </h1>
@@ -209,7 +227,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
               <div className="flex items-center justify-between gap-6">
                 <div className="flex items-center gap-6">
                   <div className="text-gray-700 font-bold uppercase tracking-widest">PESO</div>
-                  <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-emerald-400 font-mono text-4xl px-8 py-3 rounded-2xl shadow-2xl border-4 border-emerald-300">
+                  <div className={`bg-gradient-to-br from-gray-900 to-gray-800 ${isStable ? 'text-emerald-400 border-emerald-300' : 'text-blue-300 border-blue-300'} font-mono text-4xl px-8 py-3 rounded-2xl shadow-2xl border-4`}>
                     {weight.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                   </div>
                   {/* Botão de tipo de roupa com modal */}
@@ -231,8 +249,8 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                     <span className="text-sm text-gray-700">Balança</span>
                     <span className={`w-3 h-3 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                   </div>
-                </div>
-              </div>
+                      </div>
+                    </div>
             </Card>
 
             {/* Conteúdo em duas colunas: abas à esquerda e tabela à direita */}
@@ -281,56 +299,64 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                       />
                       <label className="block text-sm font-semibold text-gray-700">Tara (kg)</label>
                       <input
-                        type="number"
+                        type="text"
                         inputMode="decimal"
-                        value={cageTare}
-                        onChange={(e) => setCageTare(Number.isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border rounded"
+                        value={cageTare.toString().replace('.', ',')}
+                        onChange={(e) => setCageTare(Number.isNaN(parseFloat(e.target.value.replace(',', '.'))) ? 0 : parseFloat(e.target.value.replace(',', '.')))}
+                        onFocus={openTareKeypadIfNeeded}
+                        className="w-full px-3 py-2 border rounded cursor-pointer"
+                        readOnly={!cageBarcode}
                       />
-                      <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                         <span className={`px-2 py-1 rounded ${isStable ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{isStable ? 'Peso estável' : 'Aguardando...'}</span>
                         <Button onClick={registerWeighing} variant="success" size="sm" disabled={!isStable || weight <= 0}>Registrar</Button>
                       </div>
-                    </div>
+                </div>
                   )}
-                </Card>
-              </div>
+              </Card>
+            </div>
 
               <div className="lg:col-span-2">
-                <Card>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left">
-                      <thead>
-                        <tr className="text-sm text-gray-700 bg-gradient-to-r from-blue-50 to-emerald-50 border-y border-gray-200">
+              <Card>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left">
+                    <thead>
+                      <tr className="text-sm text-gray-700 bg-gradient-to-r from-blue-50 to-emerald-50 border-y border-gray-200">
                           <th className="px-3 py-2">Gaiola</th>
                           <th className="px-3 py-2">Tipo de roupa</th>
                           <th className="px-3 py-2">Peso (Kg)</th>
                           <th className="px-3 py-2">Peça</th>
                           <th className="px-3 py-2">Hora</th>
                           <th className="px-3 py-2">...</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {weighings.length === 0 && (
-                          <tr>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {weighings.length === 0 && (
+                        <tr>
                             <td className="px-3 py-4 text-gray-500" colSpan={6}>Nenhuma pesagem registrada.</td>
-                          </tr>
-                        )}
-                        {weighings.map((w) => (
-                          <tr key={w.id} className="border-t border-gray-100 hover:bg-gray-50">
+                        </tr>
+                      )}
+                      {weighings.map((w) => (
+                        <tr key={w.id} className="border-t border-gray-100 hover:bg-gray-50">
                             <td className="px-3 py-2 font-mono">{w.cageId}</td>
                             <td className="px-3 py-2">{w.clothingType}</td>
                             <td className="px-3 py-2">{w.net.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td className="px-3 py-2">{w.pieceCount}</td>
                             <td className="px-3 py-2">{w.timestamp.toLocaleTimeString('pt-BR')}</td>
                             <td className="px-3 py-2">
-                              <input type="checkbox" className="w-4 h-4" />
+                              <button
+                                onClick={() => setWeighings(prev => prev.filter(x => x.id !== w.id))}
+                                className="text-red-600 hover:text-red-700"
+                                title="Apagar"
+                              >
+                                🗑️
+                              </button>
                             </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 </Card>
               </div>
             </div>
@@ -352,8 +378,42 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
                   <Button variant="secondary" size="md" className="bg-white/80">Iniciar</Button>
                   <Button variant="success" size="md">Finalizar</Button>
                 </div>
+                </div>
+              </Card>
+          </div>
+        )}
+
+        {/* Modal Teclado Numérico para Tara */}
+        {showTareKeypad && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowTareKeypad(false)}></div>
+            <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800">Informar Tara da Gaiola</h3>
+                <button onClick={() => setShowTareKeypad(false)} className="text-gray-500 hover:text-gray-700">
+                  <X size={20} />
+                </button>
               </div>
-            </Card>
+              <div className="p-6">
+                <input
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-2xl text-center font-mono mb-4"
+                  value={keypadValue}
+                  onChange={(e) => setKeypadValue(e.target.value.replace(/[^0-9.,]/g, ''))}
+                />
+                <div className="grid grid-cols-3 gap-3">
+                  {[...'123456789'].map((d) => (
+                    <button key={d} onClick={() => setKeypadValue(v => (v + d))} className="px-4 py-4 bg-gray-50 rounded-xl border font-bold text-2xl">{d}</button>
+                  ))}
+                  <button onClick={() => setKeypadValue(v => (v.includes(',') || v.includes('.') ? v : (v + ',')))} className="px-4 py-4 bg-gray-50 rounded-xl border font-bold text-2xl">,</button>
+                  <button onClick={() => setKeypadValue(v => v + '0')} className="px-4 py-4 bg-gray-50 rounded-xl border font-bold text-2xl">0</button>
+                  <button onClick={() => setKeypadValue(v => (v.includes(',') || v.includes('.') ? v : (v + '.')))} className="px-4 py-4 bg-gray-50 rounded-xl border font-bold text-2xl">.</button>
+                </div>
+                <div className="flex items-center justify-between gap-3 mt-4">
+                  <Button variant="secondary" size="sm" onClick={() => setKeypadValue('')}>Limpar</Button>
+                  <Button variant="success" size="sm" onClick={applyKeypadValue}>Aplicar</Button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
