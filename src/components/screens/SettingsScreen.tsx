@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useSettings } from '../../hooks/useSettings';
+import { useClients } from '../../hooks/useClients';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -9,7 +10,8 @@ interface SettingsScreenProps {
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const { settings, setSettings } = useSettings();
-  const [tab, setTab] = React.useState<'balanca' | 'impressoras' | 'rfid' | 'servidor'>('balanca');
+  const { clients, loading: clientsLoading, selectedClient, setSelectedClient } = useClients();
+  const [tab, setTab] = React.useState<'totem' | 'balanca' | 'impressoras' | 'rfid' | 'servidor'>('totem');
   const [testMsg, setTestMsg] = React.useState<Record<string, string>>({});
 
   const testScale = () => {
@@ -40,6 +42,30 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
     }
   };
 
+  const handleTotemTypeChange = (type: 'clean' | 'dirty') => {
+    const mode = type === 'clean' ? 'distribution' : 'collection';
+    setSettings(s => ({ 
+      ...s, 
+      totem: { 
+        ...s.totem, 
+        type, 
+        mode 
+      } 
+    }));
+  };
+
+  const handleClientChange = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId);
+    setSelectedClient(client || null);
+    setSettings(s => ({ 
+      ...s, 
+      totem: { 
+        ...s.totem, 
+        clientId: clientId || undefined 
+      } 
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6 md:p-8">
       <div className="flex items-center justify-between mb-6">
@@ -52,6 +78,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
         <Card className="md:col-span-1 p-0">
           <nav className="divide-y divide-gray-100">
             {[
+              { id: 'totem', label: 'Totem' },
               { id: 'balanca', label: 'Balança' },
               { id: 'impressoras', label: 'Impressoras' },
               { id: 'rfid', label: 'Leitor RFID' },
@@ -70,6 +97,105 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
 
         {/* Tab content */}
         <div className="md:col-span-4 space-y-6">
+          {tab === 'totem' && (
+            <Card>
+              <h2 className="text-xl font-bold mb-4">Configuração do Totem</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-sm font-semibold mb-2 block">Tipo de Área</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="totemType"
+                        value="clean"
+                        checked={settings.totem.type === 'clean'}
+                        onChange={() => handleTotemTypeChange('clean')}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <div>
+                        <div className="font-medium text-green-700">Área Limpa</div>
+                        <div className="text-sm text-gray-600">Distribuição de enxoval</div>
+                      </div>
+                    </label>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="totemType"
+                        value="dirty"
+                        checked={settings.totem.type === 'dirty'}
+                        onChange={() => handleTotemTypeChange('dirty')}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <div>
+                        <div className="font-medium text-orange-700">Área Suja</div>
+                        <div className="text-sm text-gray-600">Pesagem e coleta</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold mb-2 block">Cliente</label>
+                  {clientsLoading ? (
+                    <div className="text-sm text-gray-500">Carregando clientes...</div>
+                  ) : (
+                    <select
+                      className="w-full px-3 py-2 border rounded"
+                      value={settings.totem.clientId || ''}
+                      onChange={(e) => handleClientChange(e.target.value)}
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name} {client.code && `(${client.code})`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {selectedClient && (
+                    <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                      <div className="text-sm font-medium text-blue-800">
+                        Cliente selecionado: {selectedClient.name}
+                      </div>
+                      {selectedClient.code && (
+                        <div className="text-xs text-blue-600">Código: {selectedClient.code}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-semibold mb-2">Resumo da Configuração</h3>
+                <div className="text-sm space-y-1">
+                  <div>
+                    <span className="font-medium">Tipo:</span> 
+                    <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                      settings.totem.type === 'clean' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-orange-100 text-orange-800'
+                    }`}>
+                      {settings.totem.type === 'clean' ? 'Área Limpa' : 'Área Suja'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Modo:</span> 
+                    <span className="ml-2 text-gray-700">
+                      {settings.totem.mode === 'distribution' ? 'Distribuição' : 'Coleta'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Cliente:</span> 
+                    <span className="ml-2 text-gray-700">
+                      {selectedClient ? selectedClient.name : 'Não selecionado'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {tab === 'balanca' && (
             <Card>
               <div className="flex items-center justify-between mb-4">

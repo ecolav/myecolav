@@ -10,11 +10,14 @@ import {
   AlertTriangle,
   Wifi,
   WifiOff,
-  Activity
+  Activity,
+  Package
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { User } from '../../types';
+import { useSettings } from '../../hooks/useSettings';
+import { useClients } from '../../hooks/useClients';
 
 interface DashboardScreenProps {
   user: User;
@@ -27,42 +30,72 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onNavigate, 
   onLogout 
 }) => {
+  const { settings } = useSettings();
+  const { selectedClient } = useClients();
   const [isOnline] = React.useState(true);
 
-  const tiles = [
-    {
-      id: 'weighing',
-      title: 'Pesagem & RFID',
-      icon: Scale,
-      gradient: 'from-blue-600 to-blue-800',
-      description: 'Pesagem integrada com leitura RFID',
-      stats: '1,247 peças hoje'
-    },
-    {
-      id: 'rfid',
-      title: 'Análise RFID',
-      icon: Radio,
-      gradient: 'from-emerald-500 to-emerald-700',
-      description: 'Leitura automática e inconformidades',
-      stats: '98.5% conformidade'
-    },
-    {
-      id: 'reports',
-      title: 'Relatórios',
-      icon: BarChart3,
-      gradient: 'from-purple-600 to-purple-800',
-      description: 'Dashboards e análises',
-      stats: '15 relatórios'
-    },
-    {
-      id: 'settings',
-      title: 'Configurações',
-      icon: Settings,
-      gradient: 'from-gray-600 to-gray-800',
-      description: 'Ajustes do sistema',
-      stats: 'Sistema OK'
+  // Filtrar tiles baseado no tipo de totem
+  const getAvailableTiles = () => {
+    const allTiles = [
+      {
+        id: 'weighing',
+        title: settings.totem.type === 'clean' ? 'Pesagem & RFID' : 'Pesagem & Coleta',
+        icon: Scale,
+        gradient: 'from-blue-600 to-blue-800',
+        description: settings.totem.type === 'clean' 
+          ? 'Pesagem integrada com leitura RFID' 
+          : 'Pesagem e coleta de roupas sujas',
+        stats: '1,247 peças hoje'
+      },
+      {
+        id: 'distribution',
+        title: 'Distribuição',
+        icon: Package,
+        gradient: 'from-orange-500 to-orange-700',
+        description: 'Gestão de enxoval por cliente',
+        stats: '342 itens distribuídos'
+      },
+      {
+        id: 'rfid',
+        title: 'Análise RFID',
+        icon: Radio,
+        gradient: 'from-emerald-500 to-emerald-700',
+        description: 'Leitura automática e inconformidades',
+        stats: '98.5% conformidade'
+      },
+      {
+        id: 'reports',
+        title: 'Relatórios',
+        icon: BarChart3,
+        gradient: 'from-purple-600 to-purple-800',
+        description: 'Dashboards e análises',
+        stats: '15 relatórios'
+      },
+      {
+        id: 'settings',
+        title: 'Configurações',
+        icon: Settings,
+        gradient: 'from-gray-600 to-gray-800',
+        description: 'Ajustes do sistema',
+        stats: 'Sistema OK'
+      }
+    ];
+
+    // Filtrar tiles baseado no tipo de totem
+    if (settings.totem.type === 'dirty') {
+      // Totem de área suja - apenas pesagem e coleta
+      return allTiles.filter(tile => 
+        ['weighing', 'rfid', 'reports', 'settings'].includes(tile.id)
+      );
+    } else {
+      // Totem de área limpa - distribuição e pesagem
+      return allTiles.filter(tile => 
+        ['weighing', 'distribution', 'rfid', 'reports', 'settings'].includes(tile.id)
+      );
     }
-  ];
+  };
+
+  const tiles = getAvailableTiles();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -85,10 +118,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div>
               <div className="text-lg font-semibold text-gray-800">{user.name}</div>
               <div className="text-sm text-gray-500">Operador • ID: {user.matricula}</div>
+              {selectedClient && (
+                <div className="text-sm text-gray-600 mt-1">
+                  Cliente: {selectedClient.name}
+                </div>
+              )}
             </div>
           </div>
           
           <div className="flex items-center gap-6">
+            {/* Totem Type Status */}
+            <div className={`flex items-center gap-3 rounded-full px-4 py-2 ${
+              settings.totem.type === 'clean' 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-orange-100 text-orange-800'
+            }`}>
+              <div className={`w-3 h-3 rounded-full ${
+                settings.totem.type === 'clean' ? 'bg-green-500' : 'bg-orange-500'
+              }`}></div>
+              <span className="text-sm font-semibold">
+                {settings.totem.type === 'clean' ? 'Área Limpa' : 'Área Suja'}
+              </span>
+            </div>
+            
             {/* Connection Status */}
             <div className="flex items-center gap-3 bg-white/60 rounded-full px-4 py-2">
               {isOnline ? (
@@ -136,7 +188,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Main Tiles */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {tiles.map((tile) => (
             <Card
               key={tile.id}

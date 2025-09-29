@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigation } from './hooks/useNavigation';
 import { DashboardScreen } from './components/screens/DashboardScreen';
 import { WeighingScreen } from './components/screens/WeighingScreen';
+import { DistributionScreen } from './components/screens/DistributionScreen';
 import { RFIDScreen } from './components/screens/RFIDScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { User } from './types';
@@ -29,7 +30,10 @@ function App() {
         );
       
       case 'weighing':
-        return <WeighingScreen onBack={goBack} />;
+        return <WeighingScreen onBack={goBack} onNavigate={navigateTo} />;
+      
+      case 'distribution':
+        return <DistributionScreen onBack={goBack} onNavigate={navigateTo} />;
       
       case 'rfid':
         return <RFIDScreen onBack={goBack} />;

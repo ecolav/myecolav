@@ -36,11 +36,21 @@ export interface ServerSettings {
   companyId?: string;
 }
 
+export type TotemType = 'clean' | 'dirty';
+export type TotemMode = 'distribution' | 'collection';
+
+export interface TotemSettings {
+  type: TotemType;
+  mode: TotemMode;
+  clientId?: string;
+}
+
 export interface Settings {
   scale: ScaleSettings;
   printer: PrinterSettings;
   rfid: RfidSettings;
   server: ServerSettings;
+  totem: TotemSettings;
 }
 
 const DEFAULTS: Settings = {
@@ -48,6 +58,7 @@ const DEFAULTS: Settings = {
   printer: { defaultPrinter: '', emulateESCPos: true },
   rfid: { access: 'serial', port: 'COM3', baudRate: 115200 },
   server: { baseUrl: 'http://localhost:3000', apiKey: '', companyId: '' },
+  totem: { type: 'clean', mode: 'distribution', clientId: undefined },
 };
 
 const STORAGE_KEY = 'myecolav:settings:v1';
