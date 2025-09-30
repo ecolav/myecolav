@@ -18,7 +18,7 @@ export const NumericKeypadModal: React.FC<NumericKeypadModalProps> = ({
 }) => {
   const initialText = useMemo(() => {
     const v = Number(initialValue || 0);
-    return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }, [initialValue]);
 
   const [text, setText] = useState<string>(initialText);
@@ -30,6 +30,11 @@ export const NumericKeypadModal: React.FC<NumericKeypadModalProps> = ({
     if (ch === ',') {
       if (text.includes(',')) return;
       if (text.length === 0) return setText('0,');
+    }
+    // Limitar a 2 casas decimais
+    if (text.includes(',') && ch !== '⌫' && ch !== ',') {
+      const [, dec = ''] = text.split(',');
+      if (dec.length >= 2) return;
     }
     // Evitar zeros à esquerda desnecessários
     if (ch === '0' && text === '0') return;
@@ -45,9 +50,12 @@ export const NumericKeypadModal: React.FC<NumericKeypadModalProps> = ({
   const clearAll = () => setText('');
 
   const confirm = () => {
-    const normalized = text.replace(/\./g, '').replace(',', '.');
-    const num = parseFloat(normalized);
-    onConfirm(Number.isFinite(num) ? num : 0);
+    let normalized = text.replace(/\./g, '').replace(',', '.');
+    let num = parseFloat(normalized);
+    if (!Number.isFinite(num)) num = 0;
+    // Arredondar para 2 casas
+    const fixed = Number(num.toFixed(2));
+    onConfirm(fixed);
     onClose();
   };
 

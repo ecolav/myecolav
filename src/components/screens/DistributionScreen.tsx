@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Eraser, FileDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useDistribution, DistributedItem } from '../../hooks/useDistribution';
+import { API_CONFIG } from '../../config/api';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
 
@@ -11,16 +12,7 @@ interface DistributionScreenProps {
   onNavigate?: (screen: string) => void;
 }
 
-interface Client {
-  id: string;
-  name: string;
-  document?: string;
-  contactName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  whatsappNumber?: string;
-  createdAt: string;
-}
+// Client type not used directly (kept via hook)
 
 interface Sector {
   id: string;
@@ -53,7 +45,6 @@ interface LinenItem {
 export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, onNavigate }) => {
   const { settings } = useSettings();
   const { selectedClient } = useClients();
-  const [clients, setClients] = useState<Client[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [beds, setBeds] = useState<Bed[]>([]);
   const [linenItems, setLinenItems] = useState<LinenItem[]>([]);
@@ -63,6 +54,11 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
   const [onlySectorVirtual, setOnlySectorVirtual] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDistributeOpen, setIsDistributeOpen] = useState<boolean>(false);
+  const [distributeBedId, setDistributeBedId] = useState<string>('');
+  const [distributeItemId, setDistributeItemId] = useState<string>('');
+  const [distributeQty, setDistributeQty] = useState<number>(1);
+  const [distributeBusy, setDistributeBusy] = useState<boolean>(false);
 
   const { 
     distributedItems, 
@@ -79,43 +75,83 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
   // Carregar dados iniciais
   useEffect(() => {
     loadInitialData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClient?.id, settings.totem.clientId]);
 
   const loadInitialData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Simular carregamento de dados
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Dados simulados
-      setClients([
-        { id: '1', name: 'Hospital São Paulo', document: '12.345.678/0001-90', createdAt: '2024-01-01' },
-        { id: '2', name: 'Clínica MedCenter', document: '98.765.432/0001-10', createdAt: '2024-01-01' }
-      ]);
-      
-      setSectors([
-        { id: '1', name: 'UTI', description: 'Unidade de Terapia Intensiva', clientId: '1', createdAt: '2024-01-01' },
-        { id: '2', name: 'Enfermaria A', description: 'Enfermaria A - 1º andar', clientId: '1', createdAt: '2024-01-01' },
-        { id: '3', name: 'Centro Cirúrgico', description: 'Centro Cirúrgico', clientId: '1', createdAt: '2024-01-01' }
-      ]);
-      
-      setBeds([
-        { id: '1', number: '101', sectorId: '1', status: 'occupied', token: 'BED-101' },
-        { id: '2', number: '102', sectorId: '1', status: 'free', token: 'BED-102' },
-        { id: '3', number: '201', sectorId: '2', status: 'occupied', token: 'BED-201' },
-        { id: '4', number: '202', sectorId: '2', status: 'occupied', token: 'BED-202' }
-      ]);
-      
-      setLinenItems([
-        { id: '1', name: 'Lençol Solteiro', sku: 'LS001', unit: 'un', currentStock: 150, minimumStock: 50, clientId: '1', createdAt: '2024-01-01' },
-        { id: '2', name: 'Toalha de Banho', sku: 'TB001', unit: 'un', currentStock: 200, minimumStock: 100, clientId: '1', createdAt: '2024-01-01' },
-        { id: '3', name: 'Cobertor', sku: 'CB001', unit: 'un', currentStock: 80, minimumStock: 30, clientId: '1', createdAt: '2024-01-01' }
-      ]);
+      const clientId = selectedClient?.id || settings.totem.clientId;
+      const headers: HeadersInit = { 'x-api-key': API_CONFIG.API_KEY };
+      // Carregar itens do cliente
+      const itemsRes = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.LINENS}?clientId=${encodeURIComponent(clientId || '')}`, { headers });
+      if (!itemsRes.ok) throw new Error('Falha ao carregar itens');
+      const itemsJson = await itemsRes.json();
+      const items: LinenItem[] = (itemsJson?.data ?? itemsJson ?? []) as LinenItem[];
+      setLinenItems(items);
+
+      // Carregar leitos do cliente
+      const bedsRes = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.BEDS}?clientId=${encodeURIComponent(clientId || '')}`, { headers });
+      if (!bedsRes.ok) throw new Error('Falha ao carregar leitos');
+      const bedsJson = await bedsRes.json();
+      const bedsList: Bed[] = (bedsJson?.data ?? bedsJson ?? []) as Bed[];
+      setBeds(bedsList);
+
+      // Derivar setores a partir dos leitos (se setor vier aninhado, usar; senão, agrupar por sectorId)
+      const sectorMap = new Map<string, Sector>();
+      bedsList.forEach(b => {
+        const s = (b as any).sector as Sector | undefined;
+        if (s && !sectorMap.has(s.id)) sectorMap.set(s.id, s);
+        if (!s && b.sectorId && !sectorMap.has(b.sectorId)) {
+          sectorMap.set(b.sectorId, { id: b.sectorId, name: `Setor ${b.sectorId.substring(0,4)}` , createdAt: new Date().toISOString() } as Sector);
+        }
+      });
+      setSectors(Array.from(sectorMap.values()));
     } catch (err) {
       setError('Erro ao carregar dados');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Expandir todos os setores ao carregar
+  useEffect(() => {
+    if (sectors.length > 0) {
+      setExpanded(sectors.reduce((acc, s) => { acc[s.id] = true; return acc; }, {} as Record<string, boolean>));
+    }
+  }, [sectors]);
+
+  const openDistribute = (bedId: string) => {
+    setDistributeBedId(bedId);
+    setDistributeItemId(linenItems[0]?.id || '');
+    setDistributeQty(1);
+    setIsDistributeOpen(true);
+  };
+
+  const submitDistribute = async () => {
+    try {
+      if (!distributeBedId || !distributeItemId || distributeQty <= 0) return;
+      setDistributeBusy(true);
+      const body = {
+        linenItemId: distributeItemId,
+        bedId: distributeBedId,
+        quantity: distributeQty,
+        reason: 'Totem'
+      };
+      const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.DISTRIBUTE}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_CONFIG.API_KEY },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      setIsDistributeOpen(false);
+      await refreshData();
+    } catch (e) {
+      console.error('Erro ao distribuir:', e);
+      alert('Erro ao distribuir.');
+    } finally {
+      setDistributeBusy(false);
     }
   };
 
@@ -142,17 +178,13 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
   // Agrupar itens distribuídos por setor e leito
   const groupedItems = useMemo(() => {
     const grouped: Record<string, Record<string, DistributedItem[]>> = {};
-    
     distributedItems.forEach(item => {
-      if (!grouped[item.sectorId]) {
-        grouped[item.sectorId] = {};
-      }
-      if (!grouped[item.sectorId][item.bedId]) {
-        grouped[item.sectorId][item.bedId] = [];
-      }
-      grouped[item.sectorId][item.bedId].push(item);
+      const sectorId = item.bed?.sectorId || 'unknown';
+      const bedId = item.bedId;
+      if (!grouped[sectorId]) grouped[sectorId] = {};
+      if (!grouped[sectorId][bedId]) grouped[sectorId][bedId] = [];
+      grouped[sectorId][bedId].push(item);
     });
-    
     return grouped;
   }, [distributedItems]);
 
@@ -163,7 +195,7 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
     }));
   };
 
-  const handleStatusChange = async (itemId: string, status: 'allocated' | 'collected' | 'in_transit') => {
+  const handleStatusChange = async (itemId: string, status: 'allocated' | 'collected' | 'pendingCollection') => {
     try {
       await updateItemStatus(itemId, status);
       await refreshData();
@@ -228,7 +260,7 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
       </header>
 
       <main className="p-4 md:p-8">
-        {!selectedClient && (
+        {!selectedClient && !settings.totem.clientId && (
           <div className="flex items-center justify-center min-h-[400px]">
             <Card className="max-w-md w-full text-center p-8">
               <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
@@ -247,13 +279,13 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
           </div>
         )}
 
-        {selectedClient && (
+        {(selectedClient || settings.totem.clientId) && (
           <div className="space-y-6">
             {/* Informações do Cliente */}
             <Card>
               <div className="p-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-800">{selectedClient.name}</h2>
+                  <h2 className="text-xl font-semibold text-gray-800">{selectedClient?.name || 'Cliente configurado no totem'}</h2>
                   <p className="text-gray-600">Gestão de distribuição de enxoval</p>
                 </div>
                 <Button
@@ -306,6 +338,39 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
                     </label>
                   </div>
                 </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    <span className="mr-4">Itens: {linenItems.length}</span>
+                    <span>Leitos: {beds.length}</span>
+                  </div>
+                  <Button onClick={loadInitialData} size="sm" variant="secondary">Recarregar dados</Button>
+                </div>
+                {(linenItems.length === 0 || beds.length === 0) && (
+                  <div className="mt-3 text-xs text-orange-600">
+                    {linenItems.length === 0 && 'Nenhum item encontrado para o cliente informado. '}
+                    {beds.length === 0 && 'Nenhum leito encontrado para o cliente informado.'}
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Itens do Cliente */}
+            <Card>
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Itens do Cliente</h3>
+                {linenItems.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhum item encontrado.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {linenItems.map(item => (
+                      <div key={item.id} className="border rounded-lg p-3 bg-white">
+                        <div className="font-semibold text-gray-800">{item.name}</div>
+                        <div className="text-sm text-gray-600">SKU: {item.sku} • Unidade: {item.unit}</div>
+                        <div className="mt-1 text-sm"><span className="text-gray-500">Estoque:</span> <span className="font-semibold">{item.currentStock}</span></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -355,6 +420,13 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
                                     }`}>
                                       {bed.status === 'occupied' ? 'Ocupado' : 'Livre'}
                                     </span>
+                                    <Button
+                                      onClick={() => openDistribute(bed.id)}
+                                      variant="secondary"
+                                      size="sm"
+                                    >
+                                      Distribuir
+                                    </Button>
                                     {hasAllocatedItems && (
                                       <Button
                                         onClick={() => handleCollectAll(bed.id)}
@@ -372,9 +444,9 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
                                     {bedItems.map(item => (
                                       <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                         <div>
-                                          <p className="font-medium text-gray-800">{item.linenItem.name}</p>
+                                          <p className="font-medium text-gray-800">{item.linenItem?.name || 'Item'}</p>
                                           <p className="text-sm text-gray-600">
-                                            SKU: {item.linenItem.sku} • Quantidade: {item.quantity}
+                                            SKU: {item.linenItem?.sku || '-'}
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -433,18 +505,52 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
                     </div>
                     <div className="text-sm text-gray-600">Coletados</div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-yellow-600">
-                      {distributedItems.filter(item => item.status === 'in_transit').length}
-                    </div>
-                    <div className="text-sm text-gray-600">Em Trânsito</div>
-                  </div>
+                  
                 </div>
               </div>
             </Card>
           </div>
         )}
       </main>
+      {isDistributeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setIsDistributeOpen(false)}></div>
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-800">Distribuir Enxoval</h3>
+              <Button variant="secondary" size="sm" onClick={() => setIsDistributeOpen(false)}>Fechar</Button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Item</label>
+                <select
+                  value={distributeItemId}
+                  onChange={(e) => setDistributeItemId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  {linenItems.map(it => (
+                    <option key={it.id} value={it.id}>{it.name} — {it.sku} (Estoque: {it.currentStock})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Quantidade</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={distributeQty}
+                  onChange={(e) => setDistributeQty(Math.max(1, Number(e.target.value)))}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t flex items-center justify-end gap-2">
+              <Button variant="secondary" onClick={() => setIsDistributeOpen(false)}>Cancelar</Button>
+              <Button onClick={submitDistribute} disabled={distributeBusy || !distributeItemId}>Confirmar</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

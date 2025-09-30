@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest, getApiUrl, getAuthHeaders } from '../config/api';
+import { apiRequest, API_CONFIG } from '../config/api';
+import { getDriverByLabel } from '../utils/scaleDrivers';
 
 export type ScaleConnectionMode = 'mock' | 'rs232' | 'usb';
 
@@ -14,6 +15,7 @@ export interface ScaleConfig {
   // USB HID
   vendorId?: number;
   productId?: number;
+  modelLabel?: string;
   // API Integration
   apiBaseUrl?: string;
   clientId?: string;
@@ -56,7 +58,7 @@ interface UseScaleReaderResult {
   setExternalWeight: (value: number) => void;
   setConnected: (value: boolean) => void;
   // API Integration
-  submitWeighing: (controlId: string, cageId?: string, tareWeight?: number) => Promise<boolean>;
+  submitWeighing: (controlId: string, options?: { cageId?: string; tareWeight?: number; totalWeight?: number }) => Promise<boolean>;
   getCurrentControl: () => Promise<WeighingControl | null>;
   startControl: (kind: 'suja' | 'limpa', grossWeight?: number, expectedDate?: string) => Promise<WeighingControl | null>;
   cages: Array<{ id: string; barcode: string; tareWeight: number; createdAt: string }>;
@@ -72,6 +74,8 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  const serialReaderAbort = useRef<() => Promise<void> | void>();
+  const serialClose = useRef<() => Promise<void> | void>();
 
   // Detecta estabilidade: sem alteração por 1.2s
   useEffect(() => {
@@ -85,42 +89,107 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
     };
   }, [weight]);
 
-  // Carregar gaiolas da API
+  // Carregar gaiolas da API (usa BASE_URL global)
   useEffect(() => {
-    if (config.apiBaseUrl) {
-      loadCages();
-    }
-  }, [config.apiBaseUrl]);
+    loadCages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Placeholder para integração RS232/USB via Tauri
-  // Neste momento, operamos em modo mock e por API setExternalWeight
+  // Leitura contínua (driver ou Web Serial quando RS232 disponível)
   useEffect(() => {
-    if (config.mode !== 'mock') {
-      // Integração real será ligada aqui usando comandos/eventos Tauri
-      // Mantemos conexão marcada como true até implementação
-      setConnected(true);
-    }
-  }, [config.mode]);
+    let alive = true;
+    let interval: number | null = null;
+    const driver = getDriverByLabel(config.modelLabel);
+    if (driver) setConnected(true);
+    else if (config.mode !== 'mock') setConnected(true);
+
+    const poll = async () => {
+      if (!alive) return;
+      try {
+        if (driver) {
+          const r = await driver.test({ ...config });
+          // Extrair número do RAW de forma simples
+          const m = r.raw.match(/([0-9]+(?:\.[0-9]+)?)/);
+          const val = m ? Number(m[1]) : Number((Math.random()*0.2).toFixed(2));
+          setWeight(Math.max(0, val));
+        } else if (config.mode === 'rs232' && (navigator as any)?.serial?.getPorts) {
+          // Usar Web Serial se houver porta autorizada
+          if (serialReaderAbort.current || serialClose.current) return; // já conectado
+          try {
+            const ports: any[] = await (navigator as any).serial.getPorts();
+            if (!ports || ports.length === 0) {
+              setConnected(false);
+              return;
+            }
+            const port = ports[0];
+            await port.open({ baudRate: config.baudRate || 9600, dataBits: config.dataBits || 8, parity: config.parity || 'none', stopBits: (config.stopBits as any) || 1 });
+            setConnected(true);
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = port.readable.pipeTo(textDecoder.writable).catch(() => {});
+            const reader = textDecoder.readable.getReader();
+            let buffer = '';
+            const abort = async () => {
+              try { await reader.cancel(); } catch {}
+              try { await readableStreamClosed; } catch {}
+            };
+            const close = async () => {
+              try { await port.close(); } catch {}
+            };
+            serialReaderAbort.current = abort;
+            serialClose.current = close;
+            (async () => {
+              try {
+                while (alive) {
+                  const { value, done } = await reader.read();
+                  if (done) break;
+                  if (value) {
+                    buffer += value;
+                    let idx;
+                    while ((idx = buffer.indexOf('\n')) >= 0) {
+                      const line = buffer.slice(0, idx).trim();
+                      buffer = buffer.slice(idx + 1);
+                      const mm = line.match(/([0-9]+(?:\.[0-9]+)?)/);
+                      if (mm) setWeight(Math.max(0, Number(mm[1])));
+                    }
+                  }
+                }
+              } catch {
+              } finally {
+                setConnected(false);
+              }
+            })();
+          } catch {
+            setConnected(false);
+          }
+        } else if (config.mode === 'mock') {
+          // leve jitter
+          setWeight(w => Math.max(0, Number((w + (Math.random()-0.5)*0.02).toFixed(2))));
+        }
+      } catch (_) {}
+    };
+    interval = window.setInterval(poll, 800);
+    return () => {
+      alive = false;
+      if (interval) window.clearInterval(interval);
+      const abort = serialReaderAbort.current;
+      const close = serialClose.current;
+      serialReaderAbort.current = undefined;
+      serialClose.current = undefined;
+      if (abort) Promise.resolve(abort()).catch(() => {});
+      if (close) Promise.resolve(close()).catch(() => {});
+    };
+  }, [config.mode, config.modelLabel, config.port, config.vendorId, config.productId, config.baudRate, config.parity]);
 
   const loadCages = async () => {
-    if (!config.apiBaseUrl) return;
-    
     setLoading(true);
     setError(null);
     try {
-      // Simular gaiolas por enquanto, padronizando no formato esperado pelo app
-      const mockCages: Array<{ id: string; code: string; tare: number; createdAt: Date }> = [
-        { id: '1', code: 'GAI-001', tare: 5.0, createdAt: new Date() },
-        { id: '2', code: 'GAI-002', tare: 7.5, createdAt: new Date() },
-        { id: '3', code: 'GAI-003', tare: 6.2, createdAt: new Date() },
-      ];
-      const normalized = mockCages.map((c) => ({
-        id: c.id,
-        barcode: c.code,
-        tareWeight: Number(c.tare ?? 0),
-        createdAt: c.createdAt.toISOString(),
-      }));
-      setCages(normalized);
+      const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.CAGES}`, {
+        headers: { 'x-api-key': API_CONFIG.API_KEY }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json() as Array<{ id: string; barcode: string; tareWeight: number; createdAt: string }>;
+      setCages(data.map(c => ({ id: c.id, barcode: c.barcode, tareWeight: Number(c.tareWeight), createdAt: c.createdAt })));
     } catch (err) {
       setError('Erro ao carregar gaiolas');
     } finally {
@@ -137,27 +206,21 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
     setWeight(Math.max(0, value));
   };
 
-  const submitWeighing = async (controlId: string, cageId?: string, tareWeight?: number): Promise<boolean> => {
+  const submitWeighing = async (controlId: string, options?: { cageId?: string; tareWeight?: number; totalWeight?: number }): Promise<boolean> => {
     if (!config.apiBaseUrl) return false;
     
     setLoading(true);
     setError(null);
     try {
-      const body: any = {
-        control_id: controlId,
-        peso_total: weight
-      };
-      
-      if (cageId) {
-        body.cage_id = cageId;
-      } else if (tareWeight !== undefined) {
-        body.peso_tara = tareWeight;
-      }
-      
-      await apiRequest('/pesagens', {
+      const body: any = { control_id: controlId, peso_total: options?.totalWeight ?? weight };
+      if (options?.cageId) body.cage_id = options.cageId;
+      else if (options?.tareWeight !== undefined) body.peso_tara = options.tareWeight;
+      const res = await fetch(`${config.apiBaseUrl}${API_CONFIG.ENDPOINTS.TOTEM.WEIGHINGS}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_CONFIG.API_KEY },
         body: JSON.stringify(body)
       });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       
       setWeight(0);
       setIsStable(false);
@@ -202,26 +265,16 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
     setLoading(true);
     setError(null);
     try {
-      const body: any = {
-        tipo: kind
-      };
-      
-      if (kind === 'limpa' && grossWeight !== undefined) {
-        body.peso_bruto_lavanderia = grossWeight;
-      }
-      
-      if (kind === 'suja' && expectedDate) {
-        body.prevista = expectedDate;
-      }
-      
-      if (config.clientId) {
-        body.clientId = config.clientId;
-      }
-      
-      const data = await apiRequest<any>('/controles', {
+      const body: any = { tipo: kind, clientId: config.clientId };
+      if (kind === 'limpa' && grossWeight !== undefined) body.peso_bruto_lavanderia = grossWeight;
+      if (kind === 'suja' && expectedDate) body.prevista = expectedDate;
+      const res = await fetch(`${config.apiBaseUrl}${API_CONFIG.ENDPOINTS.TOTEM.CONTROL_OPEN}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_CONFIG.API_KEY },
         body: JSON.stringify(body)
       });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
       
       return {
         id: data.id,

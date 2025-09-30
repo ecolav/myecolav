@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiRequest } from '../config/api';
+import { API_CONFIG } from '../config/api';
 
 export interface Client {
   id: string;
@@ -29,8 +29,13 @@ export function useClients(): UseClientsResult {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiRequest<{data: Client[]}>('/api/public/clients');
-      setClients(response.data);
+      const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.CLIENTS}`, {
+        headers: { 'x-api-key': API_CONFIG.API_KEY }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const payload = await res.json();
+      const list: Client[] = (payload?.data ?? payload ?? []) as Client[];
+      setClients(list);
     } catch (err) {
       setError('Erro ao carregar clientes');
       console.error('Erro ao buscar clientes:', err);

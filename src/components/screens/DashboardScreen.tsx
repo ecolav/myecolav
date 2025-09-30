@@ -111,13 +111,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
                   MyEcoLav
                 </div>
-                <div className="text-sm text-gray-500 font-medium">Sistema Industrial</div>
+                <div className="text-sm text-gray-500 font-medium">MyEcoLav Rouparia</div>
               </div>
             </div>
             <div className="h-12 w-px bg-gray-200"></div>
             <div>
-              <div className="text-lg font-semibold text-gray-800">{user.name}</div>
-              <div className="text-sm text-gray-500">Operador • ID: {user.matricula}</div>
               {selectedClient && (
                 <div className="text-sm text-gray-600 mt-1">
                   Cliente: {selectedClient.name}
@@ -163,29 +161,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* Main Content */}
       <main className="p-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <div className="text-3xl font-bold text-gray-800">1,247</div>
-            <div className="text-sm text-gray-600">Peças Processadas</div>
-            <div className="text-xs text-emerald-600 font-semibold mt-1">+12% hoje</div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <div className="text-3xl font-bold text-gray-800">98.5%</div>
-            <div className="text-sm text-gray-600">Taxa Conformidade</div>
-            <div className="text-xs text-emerald-600 font-semibold mt-1">+2.1% semana</div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <div className="text-3xl font-bold text-gray-800">2.4kg</div>
-            <div className="text-sm text-gray-600">Peso Médio</div>
-            <div className="text-xs text-blue-600 font-semibold mt-1">Estável</div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <div className="text-3xl font-bold text-gray-800">15min</div>
-            <div className="text-sm text-gray-600">Tempo Médio</div>
-            <div className="text-xs text-orange-600 font-semibold mt-1">-3min hoje</div>
-          </div>
-        </div>
+        {/* Stats Cards removidos */}
 
         {/* Main Tiles */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -215,41 +191,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           ))}
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-          <h3 className="text-xl font-bold text-gray-800 mb-6">Ações Rápidas</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <Button
-              variant="secondary"
-              size="md"
-              icon={Cloud}
-              onClick={() => {/* Sync data */}}
-              className="bg-white/80 hover:bg-white border border-gray-200"
-            >
-              Sincronizar
-            </Button>
-            
-            <Button
-              variant="danger"
-              size="md"
-              icon={AlertTriangle}
-              onClick={() => {/* Emergency */}}
-              className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200"
-            >
-              Emergência
-            </Button>
-            
-            <Button
-              variant="secondary"
-              size="md"
-              icon={LogOut}
-              onClick={onLogout}
-              className="bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200"
-            >
-              Logout
-            </Button>
-          </div>
-        </div>
+        {/* Ações rápidas removidas */}
       </main>
     </div>
   );

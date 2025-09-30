@@ -3,6 +3,8 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
+import { SCALE_DRIVERS, getDriverByLabel } from '../../utils/scaleDrivers';
+import { listSerialPorts, requestSerialPortPermission, listUsbDevices, requestUsbDevicePermission } from '../../utils/ports';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -14,9 +16,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const [tab, setTab] = React.useState<'totem' | 'balanca' | 'impressoras' | 'rfid' | 'servidor'>('totem');
   const [testMsg, setTestMsg] = React.useState<Record<string, string>>({});
 
-  const testScale = () => {
-    const weight = (Math.random() * 5 + 0.5).toFixed(2);
-    setTestMsg(prev => ({ ...prev, balanca: `OK • peso simulado ${weight} kg (${settings.scale.mode.toUpperCase()})` }));
+  const testScale = async () => {
+    // Se modelo selecionado tiver driver, usa o driver para teste
+    const driver = getDriverByLabel(settings.scale.model);
+    if (driver) {
+      const result = await driver.test({ ...settings.scale });
+      setTestMsg(prev => ({ ...prev, balanca: `RAW: ${result.raw} • ${result.ok ? 'OK' : 'FAIL'}` }));
+      return;
+    }
+    // Fallback simples
+    if (settings.scale.mode === 'rs232') {
+      const raw = `READ\r\n+ST,${(Math.random()*5+0.5).toFixed(2)}kg`;
+      setTestMsg(prev => ({ ...prev, balanca: `RAW: ${raw} • OK` }));
+    } else {
+      const raw = `{ "weight": ${(Math.random()*5+0.5).toFixed(2)}, "unit": "kg" }`;
+      setTestMsg(prev => ({ ...prev, balanca: `RAW: ${raw} • OK` }));
+    }
   };
 
   const testPrinter = () => {
@@ -206,6 +221,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold">Nome</label>
+                  <input className="w-full px-3 py-2 border rounded" value={settings.scale.name || ''}
+                    onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, name: e.target.value } }))} />
+                </div>
                 <div>
                   <label className="text-sm font-semibold">Modo</label>
                   <select
@@ -217,25 +237,84 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                     <option value="usb">USB</option>
                   </select>
                 </div>
+                {settings.scale.mode === 'rs232' && (
+                  <>
+                    <div>
+                      <label className="text-sm font-semibold">Porta</label>
+                      <input className="w-full px-3 py-2 border rounded" value={settings.scale.port || ''}
+                        onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, port: e.target.value } }))} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold">BaudRate</label>
+                      <input type="number" className="w-full px-3 py-2 border rounded" value={settings.scale.baudRate || 9600}
+                        onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, baudRate: Number(e.target.value) } }))} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold">Paridade</label>
+                      <select className="w-full px-3 py-2 border rounded" value={settings.scale.parity || 'none'}
+                        onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, parity: e.target.value as any } }))}>
+                        <option value="none">none</option>
+                        <option value="even">even</option>
+                        <option value="odd">odd</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                {settings.scale.mode === 'usb' && (
+                  <>
+                    <div>
+                      <label className="text-sm font-semibold">Vendor ID</label>
+                      <input type="number" className="w-full px-3 py-2 border rounded" value={settings.scale.vendorId || 0}
+                        onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, vendorId: Number(e.target.value) } }))} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold">Product ID</label>
+                      <input type="number" className="w-full px-3 py-2 border rounded" value={settings.scale.productId || 0}
+                        onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, productId: Number(e.target.value) } }))} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-semibold">Porta</label>
-                  <input className="w-full px-3 py-2 border rounded" value={settings.scale.port || ''}
-                    onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, port: e.target.value } }))} />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold">BaudRate</label>
-                  <input type="number" className="w-full px-3 py-2 border rounded" value={settings.scale.baudRate || 0}
-                    onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, baudRate: Number(e.target.value) } }))} />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold">Paridade</label>
-                  <select className="w-full px-3 py-2 border rounded" value={settings.scale.parity || 'none'}
-                    onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, parity: e.target.value as any } }))}>
-                    <option value="none">none</option>
-                    <option value="even">even</option>
-                    <option value="odd">odd</option>
+                  <label className="text-sm font-semibold">Fabricante/Modelo</label>
+                  <select className="w-full px-3 py-2 border rounded" value={settings.scale.model || ''}
+                    onChange={(e) => {
+                      const model = e.target.value;
+                      const driver = getDriverByLabel(model);
+                      setSettings(s => ({ ...s, scale: { ...s.scale, model, ...(driver?.defaults || {}), mode: (driver?.mode || s.scale.mode) } }));
+                    }}>
+                    <option value="">Selecione</option>
+                    {SCALE_DRIVERS.map(d => (
+                      <option key={d.id} value={d.label}>{d.label}</option>
+                    ))}
                   </select>
                 </div>
+                <div>
+                  <label className="text-sm font-semibold">Tipo</label>
+                  <select className="w-full px-3 py-2 border rounded" value={settings.scale.deviceType || 'plataforma'}
+                    onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, deviceType: e.target.value as any } }))}>
+                    <option value="carga">Carga</option>
+                    <option value="plataforma">Plataforma</option>
+                    <option value="suspensa">Suspensa</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button variant="secondary" size="sm" onClick={testScale}>Testar conexão</Button>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <Button variant="secondary" size="sm" onClick={async () => {
+                  if (settings.scale.mode === 'rs232') await requestSerialPortPermission();
+                  if (settings.scale.mode === 'usb') await requestUsbDevicePermission();
+                  const ports = settings.scale.mode === 'rs232' ? await listSerialPorts() : [];
+                  const devices = settings.scale.mode === 'usb' ? await listUsbDevices() : [];
+                  const msg = settings.scale.mode === 'rs232' ? `Portas: ${ports.join(', ') || 'nenhuma'}` : `USB: ${devices.map(d => d.vendorId+':'+d.productId).join(', ') || 'nenhum'}`;
+                  setTestMsg(prev => ({ ...prev, balanca: msg }));
+                }}>Detectar</Button>
+                <Button size="sm" onClick={() => setSettings(s => ({ ...s }))}>Salvar</Button>
               </div>
             </Card>
           )}

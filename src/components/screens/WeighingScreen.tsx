@@ -11,6 +11,7 @@ interface WeighingScreenProps {
 }
 
 export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
+  const WeighingFormViewAny: any = WeighingFormView;
   const { settings } = useSettings();
   const { clients } = useClients();
   const [step, setStep] = useState<'weighing' | 'confirmation'>('weighing');
@@ -21,9 +22,17 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     weight, 
     isStable, 
     connected, 
-    cages
+    cages,
+    startControl,
+    submitWeighing
   } = useScaleReader({ 
-    mode: 'mock',
+    mode: settings.scale.mode as any,
+    port: settings.scale.port,
+    baudRate: settings.scale.baudRate,
+    parity: settings.scale.parity as any,
+    vendorId: settings.scale.vendorId,
+    productId: settings.scale.productId,
+    modelLabel: settings.scale.model,
     apiBaseUrl: settings.server.baseUrl,
     clientId: selectedClient?.id
   });
@@ -51,6 +60,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     net: number;
     cageCode: string;
   }>>([]);
+  const [yesterdayTargetKg, setYesterdayTargetKg] = useState<number>(0);
 
   // Estados para controle de pesagem
   // const [currentControl, setCurrentControl] = useState<WeighingControl | null>(null);
@@ -60,6 +70,8 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   // const [selectedCageId, setSelectedCageId] = useState<string>('');
   const [manualTare, setManualTare] = useState(0);
   const [useManualTare, setUseManualTare] = useState(false);
+  const [controlId, setControlId] = useState<string | null>(null);
+  const [selectedCageId, setSelectedCageId] = useState<string | undefined>(undefined);
 
   // Atualizar relógio
   useEffect(() => {
@@ -85,6 +97,46 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
     setStep('weighing');
   }, [settings.totem.type]);
 
+  // Criar/garantir controle ao abrir (usa meta de ontem para limpa)
+  useEffect(() => {
+    const init = async () => {
+      if (!settings.server.baseUrl || !selectedClient?.id || !clothingType) return;
+      if (controlId) return;
+      const gross = clothingType === 'limpa' ? yesterdayTargetKg : undefined;
+      const ctrl = await startControl(clothingType as any, gross);
+      if (ctrl?.id) setControlId(ctrl.id);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.server.baseUrl, selectedClient?.id, clothingType, yesterdayTargetKg]);
+
+  // Meta do dia baseada na entrega (limpa) do dia anterior (endpoint público)
+  useEffect(() => {
+    const base = settings.server.baseUrl;
+    const clientId = selectedClient?.id;
+    if (!base || !clientId) return;
+    try {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      const y = d.toISOString().slice(0,10);
+      const url = `${base}/api/public/totem/pesagens/relatorio?start=${y}&end=${y}&clientId=${encodeURIComponent(clientId)}`;
+      fetch(url, { headers: { 'x-api-key': 'aa439ecb1dc29734874073b8bf581f528acb4e5c179b11ea' } })
+        .then(r => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            const row = data.find((x: any) => x.date === y) || data[0];
+            const target = Number(row?.peso_limpa ?? 0);
+            setYesterdayTargetKg(Number.isFinite(target) ? target : 0);
+          } else {
+            setYesterdayTargetKg(0);
+          }
+        })
+        .catch(() => setYesterdayTargetKg(0));
+    } catch {
+      setYesterdayTargetKg(0);
+    }
+  }, [settings.server.baseUrl, selectedClient?.id]);
+
   // Não há seleção de limpa/suja na UI — vem das configurações
 
   // Sem carregamento de controle via API nesta tela
@@ -92,9 +144,10 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
   // Início de pesagem ocorre diretamente na UI
 
   // Função para submeter pesagem: registra entrada local e confirma
-  const handleSubmitWeighing = () => {
-    const tareUsed = useManualTare ? manualTare : cageTare;
+  const handleCapture = async () => {
+    const tareUsed = useManualTare ? manualTare : (selectedCageId ? 0 : cageTare);
     const net = Math.max(0, weight - tareUsed);
+    const rfidSummary = Object.entries(rfidCounts).map(([k,v]) => `${k}:${v}`).join(', ');
     const newEntry = {
       id: `${Date.now()}`,
       category: selectedType,
@@ -103,9 +156,20 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
       tare: tareUsed,
       gross: weight,
       net,
-      cageCode: cageBarcode || 'MANUAL',
-    };
+      cageCode: cageBarcode || (selectedCageId ? 'GAIOLA' : 'MANUAL'),
+      rfidSummary
+    } as any;
     setEntries((prev) => [newEntry, ...prev]);
+  };
+
+  const handleFinalize = async () => {
+    if (!controlId) return;
+    for (const e of entries) {
+      const cageId = selectedCageId; // por entrada futura: armazenar cageId no item
+      const ok = await submitWeighing(controlId, { cageId, tareWeight: e.tare, totalWeight: e.gross });
+      if (!ok) break;
+    }
+    setEntries([]);
     setStep('confirmation');
   };
 
@@ -153,7 +217,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
         </div>
       </header>
 
-      <WeighingFormView
+      <WeighingFormViewAny
         step={step}
         weight={weight}
         isStable={isStable}
@@ -167,15 +231,19 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
         manualTare={manualTare}
         useManualTare={useManualTare}
         onCageBarcodeChange={setCageBarcode}
-        onCageTareChange={(v) => setCageTare(v)}
-        onUseManualTareChange={(v) => setUseManualTare(v)}
-        onManualTareChange={(v) => setManualTare(v)}
-        onSubmitWeighing={handleSubmitWeighing}
+        onCageTareChange={(v: number) => setCageTare(v)}
+        onUseManualTareChange={(v: boolean) => setUseManualTare(v)}
+        onManualTareChange={(v: number) => setManualTare(v)}
+        onCaptureWeighing={handleCapture}
+        onFinalize={handleFinalize}
         onSimulateRfid={simulateRfidReading}
         onNewWeighing={() => setStep('weighing')}
         onBack={onBack}
         entries={entries}
         cages={cages}
+        targetKg={yesterdayTargetKg}
+        progressPercent={(yesterdayTargetKg > 0 ? (entries.reduce((s, e) => s + e.net, 0) / yesterdayTargetKg) * 100 : 0)}
+        onCageSelected={(id: string) => setSelectedCageId(id)}
       />
     </div>
   );

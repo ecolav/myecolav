@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 
 export type ScaleMode = 'rs232' | 'usb';
 export interface ScaleSettings {
+  name?: string;
+  model?: string; // fabricante/modelo
+  deviceType?: 'carga' | 'plataforma' | 'suspensa';
   mode: ScaleMode;
   // RS232
   port?: string;
@@ -54,7 +57,7 @@ export interface Settings {
 }
 
 const DEFAULTS: Settings = {
-  scale: { mode: 'rs232', port: 'COM1', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
+  scale: { name: 'Balança Rouparia 01', model: '', deviceType: 'plataforma', mode: 'rs232', port: 'COM1', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
   printer: { defaultPrinter: '', emulateESCPos: true },
   rfid: { access: 'serial', port: 'COM3', baudRate: 115200 },
   server: { baseUrl: 'http://localhost:3000', apiKey: '', companyId: '' },

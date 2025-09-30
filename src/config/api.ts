@@ -4,49 +4,24 @@ export const API_CONFIG = {
   BASE_URL: 'http://162.240.227.159:4000',
   
   // Chave da API para acesso público
-  API_KEY: 'lavanderia_ecolav_@2022',
+  API_KEY: 'aa439ecb1dc29734874073b8bf581f528acb4e5c179b11ea',
   
   // Endpoints da API
   ENDPOINTS: {
-    // Autenticação
-    AUTH: {
-      LOGIN: '/auth/login',
-      ME: '/auth/me',
-      BOOTSTRAP: '/auth/bootstrap-admin'
+    // Totem público (x-api-key)
+    TOTEM: {
+      CAGES: '/api/public/totem/gaiolas',
+      CONTROL_OPEN: '/api/public/totem/controls/open',
+      WEIGHINGS: '/api/public/totem/pesagens',
+      REPORT: '/api/public/totem/pesagens/relatorio',
+      DISTRIBUTE: '/api/public/totem/distribute'
     },
-    
-    // Clientes
-    CLIENTS: '/clients',
-    
-    // Setores
-    SECTORS: '/sectors',
-    
-    // Leitos
-    BEDS: '/beds',
-    
-    // Itens de enxoval
-    ITEMS: '/items',
-    
-    // Pedidos
-    ORDERS: '/orders',
-    
-    // Movimentações de estoque
-    STOCK_MOVEMENTS: '/stock-movements',
-    
-    // Gaiolas
-    CAGES: '/gaiolas',
-    
-    // Controles de pesagem
-    WEIGHING_CONTROLS: '/controles',
-    
-    // Entradas de pesagem
-    WEIGHING_ENTRIES: '/pesagens',
-    
-    // Itens distribuídos
-    DISTRIBUTED_ITEMS: '/distributed-items',
-    
-    // ROLs especiais
-    SPECIAL_ROLLS: '/special-rolls'
+    // Público (consulta)
+    PUBLIC: {
+      CLIENTS: '/api/public/clients',
+      LINENS: '/api/public/linens',
+      BEDS: '/api/public/beds'
+    }
   },
   
   // Configurações de timeout
@@ -103,23 +78,8 @@ export async function apiRequest<T>(
 }
 
 // Função para fazer login
-export async function login(email: string, password: string) {
-  const response = await apiRequest<{
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    clientId?: string;
-    token: string;
-  }>(API_CONFIG.ENDPOINTS.AUTH.LOGIN, {
-    method: 'POST',
-    body: JSON.stringify({ email, password })
-  });
-  
-  // Salvar token no localStorage
-  localStorage.setItem('token', response.token);
-  
-  return response;
+export async function login(_email: string, _password: string) {
+  throw new Error('Login indisponível neste modo (totem público por x-api-key)');
 }
 
 // Função para fazer logout
@@ -134,10 +94,5 @@ export function isAuthenticated(): boolean {
 
 // Função para obter informações do usuário atual
 export async function getCurrentUser() {
-  return await apiRequest<{
-    id: string;
-    email: string;
-    role: string;
-    clientId?: string;
-  }>(API_CONFIG.ENDPOINTS.AUTH.ME);
+  return null as any;
 }
