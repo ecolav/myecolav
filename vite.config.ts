@@ -12,7 +12,4 @@ export default defineConfig({
   },
   clearScreen: false,
   envPrefix: ['VITE_', 'TAURI_'],
-  optimizeDeps: {
-    exclude: ['lucide-react'],
-  },
 });

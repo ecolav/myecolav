@@ -53,7 +53,6 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
   const [showCollected, setShowCollected] = useState<boolean>(false);
   const [onlySectorVirtual, setOnlySectorVirtual] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [isDistributeOpen, setIsDistributeOpen] = useState<boolean>(false);
   const [distributeBedId, setDistributeBedId] = useState<string>('');
   const [distributeItemId, setDistributeItemId] = useState<string>('');
@@ -62,8 +61,7 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
 
   const { 
     distributedItems, 
-    loading: distributionLoading, 
-    error: distributionError,
+    loading: distributionLoading,
     updateItemStatus,
     collectAllFromBed,
     refreshData
@@ -80,7 +78,6 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
 
   const loadInitialData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const clientId = selectedClient?.id || settings.totem.clientId;
       const headers: HeadersInit = { 'x-api-key': API_CONFIG.API_KEY };
@@ -92,24 +89,26 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
       setLinenItems(items);
 
       // Carregar leitos do cliente
-      const bedsRes = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.BEDS}?clientId=${encodeURIComponent(clientId || '')}`, { headers });
+      const bedsRes = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.BEDS}?clientId=${encodeURIComponent(clientId || '')}&pageSize=500`, { headers });
       if (!bedsRes.ok) throw new Error('Falha ao carregar leitos');
       const bedsJson = await bedsRes.json();
       const bedsList: Bed[] = (bedsJson?.data ?? bedsJson ?? []) as Bed[];
       setBeds(bedsList);
 
-      // Derivar setores a partir dos leitos (se setor vier aninhado, usar; senão, agrupar por sectorId)
-      const sectorMap = new Map<string, Sector>();
-      bedsList.forEach(b => {
-        const s = (b as any).sector as Sector | undefined;
-        if (s && !sectorMap.has(s.id)) sectorMap.set(s.id, s);
-        if (!s && b.sectorId && !sectorMap.has(b.sectorId)) {
-          sectorMap.set(b.sectorId, { id: b.sectorId, name: `Setor ${b.sectorId.substring(0,4)}` , createdAt: new Date().toISOString() } as Sector);
-        }
-      });
-      setSectors(Array.from(sectorMap.values()));
+      // Buscar setores REAIS da API
+      const sectorsRes = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.SECTORS}?clientId=${encodeURIComponent(clientId || '')}&pageSize=500`, { headers });
+      if (sectorsRes.ok) {
+        const sectorsJson = await sectorsRes.json();
+        const sectorsList: Sector[] = (sectorsJson?.data ?? sectorsJson ?? []) as Sector[];
+        setSectors(sectorsList);
+      } else {
+        // Fallback: derivar setores a partir dos sectorId únicos dos leitos
+        const sectorIds = Array.from(new Set(bedsList.map(b => b.sectorId).filter(Boolean)));
+        const sectorsFallback = sectorIds.map(id => ({ id, name: `Setor ${id.substring(0,6)}`, createdAt: new Date().toISOString() } as Sector));
+        setSectors(sectorsFallback);
+      }
     } catch (err) {
-      setError('Erro ao carregar dados');
+      console.error('Erro ao carregar dados:', err);
     } finally {
       setLoading(false);
     }
@@ -378,7 +377,6 @@ export const DistributionScreen: React.FC<DistributionScreenProps> = ({ onBack, 
             <div className="space-y-4">
               {filteredSectors.map(sector => {
                 const sectorBeds = beds.filter(bed => bed.sectorId === sector.id);
-                const hasItems = sectorBeds.some(bed => groupedItems[sector.id]?.[bed.id]?.length > 0);
                 
                 return (
                   <Card key={sector.id}>

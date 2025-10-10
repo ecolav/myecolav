@@ -5,10 +5,12 @@ interface ButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
   variant?: 'primary' | 'secondary' | 'danger' | 'success';
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   icon?: LucideIcon;
   disabled?: boolean;
   className?: string;
+  type?: 'button' | 'submit' | 'reset';
+  fullWidth?: boolean;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -18,7 +20,9 @@ export const Button: React.FC<ButtonProps> = ({
   size = 'lg',
   icon: Icon,
   disabled = false,
-  className = ''
+  className = '',
+  type = 'button',
+  fullWidth = false
 }) => {
   const baseClasses = 'flex items-center justify-center gap-3 font-bold rounded-xl transition-all duration-200 active:scale-95 border';
   
@@ -30,13 +34,17 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const sizeClasses = {
-    sm: 'px-4 py-2 text-lg min-h-[60px]',
-    md: 'px-6 py-3 text-xl min-h-[80px]',
-    lg: 'px-8 py-4 text-2xl min-h-[100px]'
+    sm: 'px-4 py-2 text-base min-h-[44px]',      // Padrão web
+    md: 'px-6 py-3 text-lg min-h-[50px]',        // Touch mínimo (sutilmente maior)
+    lg: 'px-8 py-4 text-xl min-h-[56px]',        // Touch confortável
+    xl: 'px-10 py-5 text-2xl min-h-[64px]'       // Touch ações principais
   };
+
+  const iconSize = size === 'xl' ? 40 : size === 'lg' ? 32 : size === 'md' ? 24 : 20;
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`
@@ -44,10 +52,11 @@ export const Button: React.FC<ButtonProps> = ({
         ${variantClasses[variant]}
         ${sizeClasses[size]}
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        ${fullWidth ? 'w-full' : ''}
         ${className}
       `}
     >
-      {Icon && <Icon size={size === 'lg' ? 32 : size === 'md' ? 24 : 20} />}
+      {Icon && <Icon size={iconSize} />}
       {children}
     </button>
   );

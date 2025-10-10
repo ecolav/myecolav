@@ -14,13 +14,17 @@ export const API_CONFIG = {
       CONTROL_OPEN: '/api/public/totem/controls/open',
       WEIGHINGS: '/api/public/totem/pesagens',
       REPORT: '/api/public/totem/pesagens/relatorio',
-      DISTRIBUTE: '/api/public/totem/distribute'
+      DISTRIBUTE: '/api/public/totem/distribute',
+      ORDERS: '/api/public/totem/orders'
     },
     // Público (consulta)
     PUBLIC: {
       CLIENTS: '/api/public/clients',
       LINENS: '/api/public/linens',
-      BEDS: '/api/public/beds'
+      BEDS: '/api/public/beds',
+      SECTORS: '/api/public/sectors',
+      SPECIAL_ROLLS: '/api/public/special-rolls',
+      USERS: '/api/public/users'
     }
   },
   

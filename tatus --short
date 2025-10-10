@@ -1,0 +1,128 @@
+warning: in the working copy of 'src/components/weighing/WeighingFormView.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/components/weighing/WeighingFormView.tsx b/src/components/weighing/WeighingFormView.tsx[m
+[1mindex 9dcebe7..a0ed53c 100644[m
+[1m--- a/src/components/weighing/WeighingFormView.tsx[m
+[1m+++ b/src/components/weighing/WeighingFormView.tsx[m
+[36m@@ -1,7 +1,10 @@[m
+ import React, { useState } from 'react';[m
+ import { Card } from '../ui/Card';[m
+ import { Button } from '../ui/Button';[m
+[31m-import { Check } from 'lucide-react';[m
+[32m+[m[32mimport { BigButton } from '../ui/BigButton';[m
+[32m+[m[32mimport { ScannerInput } from '../ui/ScannerInput';[m
+[32m+[m[32mimport { NumericKeypad } from '../ui/NumericKeypad';[m
+[32m+[m[32mimport { Check, Scale, Package } from 'lucide-react';[m
+ import { NumericKeypadModal } from '../ui/NumericKeypadModal';[m
+ import { CageSelectModal, CageItem } from './CageSelectModal';[m
+ [m
+[36m@@ -78,129 +81,164 @@[m [mexport const WeighingFormView: React.FC<WeighingFormViewProps> = ({[m
+   onCageSelected[m
+ }) => {[m
+   const totalGross = entries.reduce((sum, e) => sum + e.gross, 0);[m
+[32m+[m[32m  const totalNet = entries.reduce((sum, e) => sum + e.net, 0);[m
+   const totalPieces = entries.reduce((sum, e) => sum + e.pieceCount, 0);[m
+   const [manualOpen, setManualOpen] = useState(false);[m
+   const [cageOpen, setCageOpen] = useState(false);[m
+[32m+[m[32m  const [showTareKeypad, setShowTareKeypad] = useState(false);[m
+[32m+[m[32m  const [showCageScanner, setShowCageScanner] = useState(false);[m
+   const isDev = (import.meta as any)?.env?.DEV ?? false;[m
+   const hasRfid = Object.keys(rfidCounts).length > 0;[m
+[32m+[m[32m  const displayTare = useManualTare ? manualTare : cageTare;[m
+[32m+[m[32m  const netWeight = Math.max(0, weight - displayTare);[m
+   return ([m
+[31m-    <main className="p-3">[m
+[32m+[m[32m    <main className="p-6">[m
+       {step === 'weighing' && ([m
+[31m-        <div className="space-y-3">[m
+[31m-          {/* Barra 1: Campos compactos, tipo, contadores e status */}[m
+[31m-          <div className="flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-md px-3 py-2 shadow-sm">[m
+[31m-            <div className="flex items-center gap-2">[m
+[31m-              <span className="text-xs font-semibold tracking-widest text-gray-700">PESO (kg)</span>[m
+[31m-              <input[m
+[31m-                readOnly[m
+[31m-                value={weight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}[m
+[31m-                className="w-24 h-8 px-2 border border-gray-300 rounded text-right font-semibold"[m
+[31m-              />[m
+[31m-              {/* Campos da lógica mapeados em visual compacto */}[m
+[31m-              <input[m
+[31m-                type="text"[m
+[31m-                value={cageBarcode}[m
+[31m-                onChange={(e) => onCageBarcodeChange(e.target.value)}[m
+[31m-                placeholder="Código da gaiola"[m
+[31m-                className="w-28 h-8 px-2 border border-gray-300 rounded text-sm"[m
+[31m-              />[m
+[31m-              <Button size="sm" variant="secondary" onClick={() => setCageOpen(true)} className="h-8 px-2 text-xs">Gaiola</Button>[m
+[31m-              <input[m
+[31m-                type="text"[m
+[31m-                step="0.01"[m
+[31m-                value={cageTare}[m
+[31m-                readOnly[m
+[31m-                onClick={() => setManualOpen(true)}[m
+[31m-                placeholder="Tara (kg)"[m
+[31m-                className="w-28 h-8 px-2 border border-gray-300 rounded text-sm"[m
+[31m-              />[m
+[31m-            </div>[m
+[31m-            <div className="flex items-center gap-4">[m
+[31m-              {!connected && ([m
+[31m-                <div className="flex items-center gap-2 text-sm text-gray-700">[m
+[31m-                  <span className="text-red-700">Balança Desconectada</span>[m
+[31m-                  <span className="inline-block w-3 h-3 rounded-full bg-red-500"></span>[m
+[32m+[m[32m        <div className="space-y-6">[m
+[32m+[m[32m          {/* Display GRANDE do Peso */}[m
+[32m+[m[32m          <Card className="p-8 bg-gradient-to-br from-blue-50 to-blue-100 border-4 border-blue-300">[m
+[32m+[m[32m            <div className="text-center">[m
+[32m+[m[32m              <p className="text-2xl font-bold text-gray-700 mb-2">PESO ATUAL</p>[m
+[32m+[m[32m              <div className="flex items-center justify-center gap-6 mb-4">[m
+[32m+[m[32m                <div className="text-center flex-1">[m
+[32m+[m[32m                  <p className="text-lg text-gray-600">Bruto</p>[m
+[32m+[m[32m                  <p className="text-7xl font-bold text-blue-900 tabular-nums">[m
+[32m+[m[32m                    {weight.toFixed(2)}[m
+[32m+[m[32m                  </p>[m
+[32m+[m[32m                  <p className="text-3xl font-bold text-gray-600">kg</p>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                <div className="text-6xl text-gray-400">-</div>[m
+[32m+[m[32m                <div className="text-center flex-1">[m
+[32m+[m[32m                  <p className="text-lg text-gray-600">Tara</p>[m
+[32m+[m[32m                  <p className="text-7xl font-bold text-orange-600 tabular-nums">[m
+[32m+[m[32m                    {displayTare.toFixed(2)}[m
+[32m+[m[32m                  </p>[m
+[32m+[m[32m                  <p className="text-3xl font-bold text-gray-600">kg</p>[m
+                 </div>[m
+[31m-              )}[m
+[32m+[m[32m                <div className="text-6xl text-gray-400">=</div>[m
+[32m+[m[32m                <div className="text-center flex-1">[m
+[32m+[m[32m                  <p className="text-lg text-gray-600">Líquido</p>[m
+[32m+[m[32m                  <p className="text-7xl font-bold text-green-600 tabular-nums">[m
+[32m+[m[32m                    {netWeight.toFixed(2)}[m
+[32m+[m[32m                  </p>[m
+[32m+[m[32m                  <p className="text-3xl font-bold text-gray-600">kg</p>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              {/* Indicador de estabilidade */}[m
+[32m+[m[32m              <div className="flex items-center justify-center gap-3">[m
+[32m+[m[32m                <div className={`w-6 h-6 rounded-full ${isStable ? 'bg-green-500 animate-pulse' : 'bg-orange-400'}`}></div>[m
+[32m+[m[32m                <span className={`text-2xl font-bold ${isStable ? 'text-green-700' : 'text-orange-600'}`}>[m
+[32m+[m[32m                  {isStable ? '✓ Peso Estável' : '⏳ Aguardando estabilizar...'}[m
+[32m+[m[32m                </span>[m
+[32m+[m[32m              </div>[m
+             </div>[m
+[31m-          </div>[m
+[32m+[m[32m          </Card>[m
+ [m
+[31m-          {/* Barra 2: Abas visuais */}[m
+[31m-          <div className="flex items-center gap-2">[m
+[31m-            <span className="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm">Gaiolas</span>[m
+[31m-            <span className="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm">Quantidade</span>[m
+[31m-            <span className="px-3 py-1.5 rounded border border-blue-500 bg-blue-600 text-white text-sm font-semibold">Pesagem</span>[m
+[32m+[m[32m          {/* Botões de Ação GRANDES */}[m
+[32m+[m[32m          <div className="grid grid-cols-3 gap-4">[m
+[32m+[m[32m            <BigButton[m
+[32m+[m[32m              onClick={() => setShowCageScanner(true)}[m
+[32m+[m[32m              variant="secondary"[m
+[32m+[m[32m              icon={Package}[m
+[32m+[m[32m              subtitle={cageBarcode ? `Gaiola: ${cageBarcode}` : 'Nenhuma selecionada'}[m
+[32m+[m[32m            >[m
+[32m+[m[32m              {cageBarcode ? 'Trocar Gaiola' : 'Scanner Gaiola'}[m
+[32m+[m[32m            </BigButton>[m
+[32m+[m[32m            <BigButton[m
+[32m+[m[32m              onClick={() => setShow

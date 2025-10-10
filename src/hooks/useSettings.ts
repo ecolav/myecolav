@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type ScaleMode = 'rs232' | 'usb';
+export type ScaleMode = 'mock' | 'rs232' | 'usb' | 'tcpip';
 export interface ScaleSettings {
   name?: string;
   model?: string; // fabricante/modelo
@@ -39,6 +39,13 @@ export interface ServerSettings {
   companyId?: string;
 }
 
+export interface NetworkSettings {
+  enabled: boolean;
+  port: number;
+  host: string; // IP ou hostname para bind
+  autoStart: boolean;
+}
+
 export type TotemType = 'clean' | 'dirty';
 export type TotemMode = 'distribution' | 'collection';
 
@@ -54,14 +61,16 @@ export interface Settings {
   rfid: RfidSettings;
   server: ServerSettings;
   totem: TotemSettings;
+  network: NetworkSettings;
 }
 
 const DEFAULTS: Settings = {
-  scale: { name: 'Balança Rouparia 01', model: '', deviceType: 'plataforma', mode: 'rs232', port: 'COM1', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
+  scale: { name: 'Balança Rouparia 01', model: '', deviceType: 'plataforma', mode: 'mock', port: 'COM1', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
   printer: { defaultPrinter: '', emulateESCPos: true },
   rfid: { access: 'serial', port: 'COM3', baudRate: 115200 },
-  server: { baseUrl: 'http://localhost:3000', apiKey: '', companyId: '' },
-  totem: { type: 'clean', mode: 'distribution', clientId: undefined },
+  server: { baseUrl: 'http://162.240.227.159:4000', apiKey: 'aa439ecb1dc29734874073b8bf581f528acb4e5c179b11ea', companyId: '' },
+  totem: { type: 'dirty', mode: 'collection', clientId: undefined },
+  network: { enabled: false, port: 3000, host: '0.0.0.0', autoStart: false },
 };
 
 const STORAGE_KEY = 'myecolav:settings:v1';

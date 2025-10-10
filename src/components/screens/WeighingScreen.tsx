@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Scale } from 'lucide-react';
+import { ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { WeighingFormView } from '../weighing/WeighingFormView';
 import { useScaleReader } from '../../hooks/useScaleReader';
@@ -190,27 +190,33 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-white/20 sticky top-0 z-10">
-        <div className="p-4 md:p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button onClick={onBack} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white/60">
-            Voltar
-          </Button>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-wide bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
-                {selectedClient ? selectedClient.name : 'Cliente não selecionado'}
-                {clothingType && ` - ${clothingType === 'limpa' ? 'Entrega' : 'Coleta'}`}
-            </h1>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-sm text-gray-600 font-semibold bg-white/60 rounded-full px-4 py-2 border border-white/20">
-              {now.toLocaleDateString('pt-BR')} • {now.toLocaleTimeString('pt-BR')}
+      <header className="bg-white/80 backdrop-blur-sm border-b-4 border-white/20 sticky top-0 z-10 shadow-lg">
+        <div className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <Button onClick={onBack} variant="secondary" size="md" icon={ArrowLeft}>
+                Voltar
+              </Button>
+              <div>
+                <h1 className="text-4xl font-bold tracking-wide bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
+                  {selectedClient ? selectedClient.name : 'Cliente não selecionado'}
+                </h1>
+                <p className="text-xl font-semibold text-gray-600 mt-1">
+                  {clothingType && `${clothingType === 'limpa' ? '🟢 Entrega (Limpa)' : '🟠 Coleta (Suja)'}`}
+                </p>
               </div>
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold ${
-                connected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-xl text-gray-700 font-bold bg-white rounded-2xl px-6 py-3 border-4 border-gray-200 shadow-md">
+                {now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl text-xl font-bold border-4 ${
+                connected 
+                  ? 'bg-green-100 text-green-900 border-green-300' 
+                  : 'bg-red-100 text-red-900 border-red-300'
               }`}>
-                <Scale size={16} />
-                {connected ? 'Balança Conectada' : 'Balança Desconectada'}
+                {connected ? <Wifi size={28} /> : <WifiOff size={28} />}
+                {connected ? 'Conectado' : 'Desconectado'}
               </div>
             </div>
           </div>

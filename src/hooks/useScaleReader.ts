@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiRequest, API_CONFIG } from '../config/api';
 import { getDriverByLabel } from '../utils/scaleDrivers';
 
-export type ScaleConnectionMode = 'mock' | 'rs232' | 'usb';
+export type ScaleConnectionMode = 'mock' | 'rs232' | 'usb' | 'tcpip';
 
 export interface ScaleConfig {
   mode: ScaleConnectionMode;
@@ -16,6 +16,9 @@ export interface ScaleConfig {
   vendorId?: number;
   productId?: number;
   modelLabel?: string;
+  // TCP/IP Network
+  host?: string; // IP ou hostname da balança
+  tcpPort?: number; // porta TCP da balança
   // API Integration
   apiBaseUrl?: string;
   clientId?: string;
@@ -76,6 +79,7 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
   const timerRef = useRef<number | null>(null);
   const serialReaderAbort = useRef<() => Promise<void> | void>();
   const serialClose = useRef<() => Promise<void> | void>();
+  const tcpSocketRef = useRef<WebSocket | null>(null);
 
   // Detecta estabilidade: sem alteração por 1.2s
   useEffect(() => {
@@ -161,6 +165,73 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
           } catch {
             setConnected(false);
           }
+        } else if (config.mode === 'tcpip') {
+          // Conexão TCP/IP com balança em rede
+          if (tcpSocketRef.current) return; // já conectado
+          
+          try {
+            const host = config.host || '192.168.1.100';
+            const port = config.tcpPort || 4001;
+            
+            // Criar WebSocket para comunicação TCP (simulado via WebSocket)
+            // Em um ambiente real, seria necessário usar uma biblioteca como socket.io ou implementar via backend
+            const wsUrl = `ws://${host}:${port}`;
+            const socket = new WebSocket(wsUrl);
+            
+            socket.onopen = () => {
+              setConnected(true);
+              console.log('Conectado à balança TCP/IP:', wsUrl);
+            };
+            
+            socket.onmessage = (event) => {
+              try {
+                // Processar dados recebidos da balança
+                const data = event.data;
+                console.log('Dados recebidos da balança:', data);
+                
+                // Tentar extrair peso dos dados (formato pode variar conforme o modelo)
+                const weightMatch = data.match(/([0-9]+(?:\.[0-9]+)?)/);
+                if (weightMatch) {
+                  setWeight(Math.max(0, Number(weightMatch[1])));
+                }
+              } catch (error) {
+                console.error('Erro ao processar dados da balança:', error);
+              }
+            };
+            
+            socket.onclose = () => {
+              setConnected(false);
+              tcpSocketRef.current = null;
+              console.log('Conexão TCP/IP com balança fechada');
+            };
+            
+            socket.onerror = (error) => {
+              setConnected(false);
+              console.error('Erro na conexão TCP/IP com balança:', error);
+            };
+            
+            tcpSocketRef.current = socket;
+            
+            // Enviar comando de leitura contínua (se necessário)
+            const sendReadCommand = () => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send('READ\r\n'); // Comando comum para balanças
+              }
+            };
+            
+            // Enviar comando a cada 500ms
+            const readInterval = setInterval(() => {
+              if (!alive || socket.readyState !== WebSocket.OPEN) {
+                clearInterval(readInterval);
+                return;
+              }
+              sendReadCommand();
+            }, 500);
+            
+          } catch (error) {
+            console.error('Erro ao conectar TCP/IP:', error);
+            setConnected(false);
+          }
         } else if (config.mode === 'mock') {
           // leve jitter
           setWeight(w => Math.max(0, Number((w + (Math.random()-0.5)*0.02).toFixed(2))));
@@ -173,10 +244,15 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
       if (interval) window.clearInterval(interval);
       const abort = serialReaderAbort.current;
       const close = serialClose.current;
+      const tcpSocket = tcpSocketRef.current;
       serialReaderAbort.current = undefined;
       serialClose.current = undefined;
       if (abort) Promise.resolve(abort()).catch(() => {});
       if (close) Promise.resolve(close()).catch(() => {});
+      if (tcpSocket) {
+        tcpSocket.close();
+        tcpSocketRef.current = null;
+      }
     };
   }, [config.mode, config.modelLabel, config.port, config.vendorId, config.productId, config.baudRate, config.parity]);
 

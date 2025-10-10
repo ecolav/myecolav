@@ -2,9 +2,10 @@ import React from 'react';
 import { useNavigation } from './hooks/useNavigation';
 import { DashboardScreen } from './components/screens/DashboardScreen';
 import { WeighingScreen } from './components/screens/WeighingScreen';
-import { DistributionScreen } from './components/screens/DistributionScreen';
+import { DistributionAndOrdersScreen } from './components/screens/DistributionAndOrdersScreen';
 import { RFIDScreen } from './components/screens/RFIDScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
+import { SpecialRollsScreen } from './components/screens/SpecialRollsScreen';
 import { User } from './types';
 
 function App() {
@@ -33,10 +34,14 @@ function App() {
         return <WeighingScreen onBack={goBack} onNavigate={navigateTo} />;
       
       case 'distribution':
-        return <DistributionScreen onBack={goBack} onNavigate={navigateTo} />;
+      case 'distribution-orders':
+        return <DistributionAndOrdersScreen onBack={goBack} />;
       
       case 'rfid':
         return <RFIDScreen onBack={goBack} />;
+      
+      case 'specialrolls':
+        return <SpecialRollsScreen onBack={goBack} />;
       
       case 'reports':
         return (

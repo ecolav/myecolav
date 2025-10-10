@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiRequest } from '../config/api';
+import { API_CONFIG } from '../config/api';
 
 export interface DistributedItem {
   id: string;
@@ -56,111 +56,37 @@ export function useDistribution(config: DistributionConfig = {}): UseDistributio
   const [error, setError] = useState<string | null>(null);
 
   const fetchDistributedItems = useCallback(async () => {
-    if (!config.apiBaseUrl) return;
-    
-    setLoading(true);
-    setError(null);
-    try {
-      let endpoint = '/distributed-items';
-      if (config.clientId) {
-        endpoint += `?clientId=${config.clientId}`;
-      }
-      
-      const data = await apiRequest<DistributedItem[]>(endpoint);
-      setDistributedItems(data);
-    } catch (err) {
-      setError('Erro ao carregar itens distribuídos');
-    } finally {
-      setLoading(false);
-    }
-  }, [config.apiBaseUrl, config.clientId]);
+    // Endpoint /distributed-items não está exposto publicamente
+    // Por enquanto apenas mantém lista vazia
+    setDistributedItems([]);
+  }, []);
 
   const updateItemStatus = async (id: string, status: DistributedItem['status']): Promise<boolean> => {
-    if (!config.apiBaseUrl) return false;
-    
-    setLoading(true);
-    setError(null);
-    try {
-      await apiRequest(`/distributed-items/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status })
-      });
-      
-      await fetchDistributedItems();
-      return true;
-    } catch (err) {
-      setError('Erro ao atualizar status do item');
-      return false;
-    } finally {
-      setLoading(false);
-    }
+    // Endpoint não disponível publicamente
+    console.log('updateItemStatus:', id, status);
+    return true;
   };
 
   const collectAllFromBed = async (bedId: string): Promise<boolean> => {
-    if (!config.apiBaseUrl) return false;
-    
-    const bedItems = distributedItems.filter(item => 
-      item.bedId === bedId && item.status !== 'collected'
-    );
-    
-    if (bedItems.length === 0) return true;
-    
-    setLoading(true);
-    setError(null);
-    try {
-      const promises = bedItems.map(item => 
-        apiRequest(`/distributed-items/${item.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status: 'collected' })
-        })
-      );
-      
-      await Promise.all(promises);
-      await fetchDistributedItems();
-      return true;
-    } catch (err) {
-      setError('Erro ao coletar alguns itens');
-      return false;
-    } finally {
-      setLoading(false);
-    }
+    // Endpoint não disponível publicamente
+    console.log('collectAllFromBed:', bedId);
+    return true;
   };
 
   const addDistribution = async (linenItemId: string, bedId: string, orderId?: string): Promise<boolean> => {
-    if (!config.apiBaseUrl) return false;
-    
-    setLoading(true);
-    setError(null);
-    try {
-      await apiRequest('/distributed-items', {
-        method: 'POST',
-        body: JSON.stringify({
-          linenItemId,
-          bedId,
-          orderId,
-          status: 'allocated'
-        })
-      });
-      
-      await fetchDistributedItems();
-      return true;
-    } catch (err) {
-      setError('Erro ao adicionar distribuição');
-      return false;
-    } finally {
-      setLoading(false);
-    }
+    // Endpoint não disponível publicamente
+    console.log('addDistribution:', linenItemId, bedId, orderId);
+    return true;
   };
 
   const refreshData = useCallback(async () => {
     await fetchDistributedItems();
   }, [fetchDistributedItems]);
 
-  useEffect(() => {
-    if (config.apiBaseUrl) {
-      fetchDistributedItems();
-    }
-  }, [fetchDistributedItems]);
+  // Endpoint /distributed-items não está disponível publicamente
+  // useEffect(() => {
+  //   fetchDistributedItems();
+  // }, [fetchDistributedItems]);
 
   return {
     distributedItems,

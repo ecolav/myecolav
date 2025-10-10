@@ -11,7 +11,8 @@ import {
   Wifi,
   WifiOff,
   Activity,
-  Package
+  Package,
+  ShoppingCart
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -48,28 +49,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         stats: '1,247 peças hoje'
       },
       {
-        id: 'distribution',
-        title: 'Distribuição',
+        id: 'distribution-orders',
+        title: 'Distribuição & Pedidos',
         icon: Package,
-        gradient: 'from-orange-500 to-orange-700',
-        description: 'Gestão de enxoval por cliente',
-        stats: '342 itens distribuídos'
+        gradient: 'from-purple-500 to-purple-700',
+        description: 'Distribuir enxoval ou solicitar itens',
+        stats: 'Gestão unificada'
       },
       {
-        id: 'rfid',
-        title: 'Análise RFID',
-        icon: Radio,
-        gradient: 'from-emerald-500 to-emerald-700',
-        description: 'Leitura automática e inconformidades',
-        stats: '98.5% conformidade'
-      },
-      {
-        id: 'reports',
-        title: 'Relatórios',
-        icon: BarChart3,
-        gradient: 'from-purple-600 to-purple-800',
-        description: 'Dashboards e análises',
-        stats: '15 relatórios'
+        id: 'specialrolls',
+        title: 'Rolos Especiais',
+        icon: Activity,
+        gradient: 'from-indigo-500 to-indigo-700',
+        description: 'Cadastro e rastreamento de rolos',
+        stats: 'Registro rápido'
       },
       {
         id: 'settings',
@@ -83,14 +76,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     // Filtrar tiles baseado no tipo de totem
     if (settings.totem.type === 'dirty') {
-      // Totem de área suja - apenas pesagem e coleta
+      // Totem de área suja - apenas pesagem, rolos especiais e configurações
       return allTiles.filter(tile => 
-        ['weighing', 'rfid', 'reports', 'settings'].includes(tile.id)
+        ['weighing', 'specialrolls', 'settings'].includes(tile.id)
       );
     } else {
-      // Totem de área limpa - distribuição e pesagem
+      // Totem de área limpa - pesagem, distribuição & pedidos, rolos especiais e configurações
       return allTiles.filter(tile => 
-        ['weighing', 'distribution', 'rfid', 'reports', 'settings'].includes(tile.id)
+        ['weighing', 'distribution-orders', 'specialrolls', 'settings'].includes(tile.id)
       );
     }
   };
@@ -163,13 +156,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <main className="p-8">
         {/* Stats Cards removidos */}
 
-        {/* Main Tiles */}
+        {/* Main Tiles - ESTILO ECOLAV com ajuste touch sutil */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {tiles.map((tile) => (
             <Card
               key={tile.id}
               onClick={() => onNavigate(tile.id)}
-              className="h-80 relative overflow-hidden group"
+              className="h-80 relative overflow-hidden group cursor-pointer hover:shadow-xl transition-shadow border-2 border-gray-200 hover:border-blue-400"
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} opacity-5 group-hover:opacity-10 transition-opacity`}></div>
               <div className="relative z-10 h-full flex flex-col justify-between p-8">
