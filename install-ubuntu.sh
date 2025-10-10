@@ -80,10 +80,22 @@ fi
 print_success "Repositórios atualizados"
 
 # 2. Instalar dependências do Tauri
-print_step "2/7 - Instalando dependências do Tauri..."
-sudo apt install -y -qq \
-    libwebkit2gtk-4.1-0 \
-    libwebkit2gtk-4.1-dev \
+print_step "2/7 - Instalando dependências do Tauri (isso pode demorar alguns minutos)..."
+
+# Tentar instalar webkit 4.1 (Ubuntu 22.04+)
+print_step "Tentando instalar webkit2gtk-4.1..."
+if sudo apt install -y libwebkit2gtk-4.1-0 libwebkit2gtk-4.1-dev 2>/dev/null; then
+    print_success "webkit2gtk-4.1 instalado"
+else
+    # Fallback para webkit 4.0 (Ubuntu 20.04)
+    print_warning "webkit2gtk-4.1 não disponível. Tentando webkit2gtk-4.0..."
+    sudo apt install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.0-37
+    print_success "webkit2gtk-4.0 instalado"
+fi
+
+# Instalar outras dependências
+print_step "Instalando outras dependências..."
+sudo apt install -y \
     libgtk-3-dev \
     libayatana-appindicator3-dev \
     librsvg2-dev \
@@ -94,7 +106,8 @@ sudo apt install -y -qq \
     wget \
     file \
     pkg-config \
-    git > /dev/null 2>&1
+    git
+
 print_success "Dependências do Tauri instaladas"
 
 # 3. Verificar/Instalar Node.js
