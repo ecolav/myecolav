@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import EcolavLogo from '../ui/EcolavLogo';
 import { User } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
@@ -97,14 +98,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl flex items-center justify-center">
-                <Activity className="text-white" size={28} />
-              </div>
+              <EcolavLogo size={48} />
               <div>
                 <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-emerald-600 bg-clip-text text-transparent">
-                  MyEcoLav
+                  ECOLAV
                 </div>
-                <div className="text-sm text-gray-500 font-medium">MyEcoLav Rouparia</div>
+                <div className="text-sm text-gray-500 font-medium">Lavanderia Industrial</div>
               </div>
             </div>
             <div className="h-12 w-px bg-gray-200"></div>

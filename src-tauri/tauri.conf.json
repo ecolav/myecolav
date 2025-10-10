@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "myecolav",
+  "productName": "ECOLAV Totem",
   "version": "0.1.0",
-  "identifier": "com.myecolav.desktop",
+  "identifier": "com.ecolav.totem",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "myecolav",
-        "width": 800,
-        "height": 600,
+        "title": "ECOLAV - Totem Lavanderia Industrial",
+        "width": 1366,
+        "height": 768,
         "resizable": true,
         "fullscreen": false
       }
