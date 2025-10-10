@@ -88,20 +88,26 @@ print_step "Ubuntu $UBUNTU_VERSION detectado"
 
 # Instalar webkit baseado na versão
 if [[ "$UBUNTU_VERSION" == "22.04" ]] || [[ "$UBUNTU_VERSION" == "24.04" ]]; then
-    print_step "Instalando webkit2gtk-4.1 e javascriptcore-4.1 (Ubuntu 22.04+)..."
+    print_step "Instalando webkit, javascriptcore e soup (Ubuntu 22.04+)..."
     sudo apt install -y \
         libwebkit2gtk-4.1-0 \
         libwebkit2gtk-4.1-dev \
         libjavascriptcoregtk-4.1-0 \
-        libjavascriptcoregtk-4.1-dev
-    print_success "webkit2gtk-4.1 instalado"
+        libjavascriptcoregtk-4.1-dev \
+        libsoup-3.0-0 \
+        libsoup-3.0-dev \
+        libsoup2.4-1 \
+        libsoup2.4-dev
+    print_success "Dependências webkit instaladas"
 else
-    print_step "Instalando webkit2gtk-4.0 e javascriptcore-4.0 (Ubuntu 20.04)..."
+    print_step "Instalando webkit, javascriptcore e soup (Ubuntu 20.04)..."
     sudo apt install -y \
         libwebkit2gtk-4.0-dev \
         libwebkit2gtk-4.0-37 \
-        libjavascriptcoregtk-4.0-dev
-    print_success "webkit2gtk-4.0 instalado"
+        libjavascriptcoregtk-4.0-dev \
+        libsoup2.4-1 \
+        libsoup2.4-dev
+    print_success "Dependências webkit instaladas"
 fi
 
 # Instalar outras dependências

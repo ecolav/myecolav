@@ -20,7 +20,7 @@ print_success() {
 
 echo ""
 echo "╔════════════════════════════════════════════════════╗"
-echo "║     Fix JavaScriptCore GTK - ECOLAV Totem         ║"
+echo "║   Fix Dependências Completas - ECOLAV Totem       ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 
@@ -30,33 +30,40 @@ print_step "Ubuntu $UBUNTU_VERSION detectado"
 
 # Instalar baseado na versão
 if [[ "$UBUNTU_VERSION" == "22.04" ]] || [[ "$UBUNTU_VERSION" == "24.04" ]] || [[ "$UBUNTU_VERSION" > "22.04" ]]; then
-    print_step "Instalando javascriptcoregtk-4.1 (Ubuntu 22.04+)..."
+    print_step "Instalando todas as dependências necessárias (Ubuntu 22.04+)..."
     sudo apt update
     sudo apt install -y \
         libwebkit2gtk-4.1-0 \
         libwebkit2gtk-4.1-dev \
         libjavascriptcoregtk-4.1-0 \
         libjavascriptcoregtk-4.1-dev \
-        gir1.2-javascriptcoregtk-4.1
-    print_success "javascriptcoregtk-4.1 instalado!"
+        gir1.2-javascriptcoregtk-4.1 \
+        libsoup-3.0-0 \
+        libsoup-3.0-dev \
+        libsoup2.4-1 \
+        libsoup2.4-dev
+    print_success "Todas as dependências instaladas!"
     
 elif [[ "$UBUNTU_VERSION" == "20.04" ]]; then
-    print_step "Instalando javascriptcoregtk-4.0 (Ubuntu 20.04)..."
+    print_step "Instalando todas as dependências necessárias (Ubuntu 20.04)..."
     sudo apt update
     sudo apt install -y \
         libwebkit2gtk-4.0-dev \
         libwebkit2gtk-4.0-37 \
         libjavascriptcoregtk-4.0-dev \
-        gir1.2-javascriptcoregtk-4.0
-    print_success "javascriptcoregtk-4.0 instalado!"
+        gir1.2-javascriptcoregtk-4.0 \
+        libsoup2.4-1 \
+        libsoup2.4-dev
+    print_success "Todas as dependências instaladas!"
     
 else
     print_step "Versão não reconhecida. Tentando instalar 4.0..."
     sudo apt update
     sudo apt install -y \
         libwebkit2gtk-4.0-dev \
-        libjavascriptcoregtk-4.0-dev
-    print_success "javascriptcoregtk instalado!"
+        libjavascriptcoregtk-4.0-dev \
+        libsoup2.4-dev
+    print_success "Dependências instaladas!"
 fi
 
 echo ""

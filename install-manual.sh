@@ -61,15 +61,21 @@ if [[ "$UBUNTU_VERSION" == "22.04" ]] || [[ "$UBUNTU_VERSION" == "24.04" ]]; the
         libwebkit2gtk-4.1-0 \
         libwebkit2gtk-4.1-dev \
         libjavascriptcoregtk-4.1-0 \
-        libjavascriptcoregtk-4.1-dev
+        libjavascriptcoregtk-4.1-dev \
+        libsoup-3.0-0 \
+        libsoup-3.0-dev \
+        libsoup2.4-1 \
+        libsoup2.4-dev
 else
     echo "Instalando versão 4.0 (Ubuntu 20.04)..."
     sudo apt install -y \
         libwebkit2gtk-4.0-dev \
         libwebkit2gtk-4.0-37 \
-        libjavascriptcoregtk-4.0-dev
+        libjavascriptcoregtk-4.0-dev \
+        libsoup2.4-1 \
+        libsoup2.4-dev
 fi
-print_success "webkit2gtk e javascriptcore instalados"
+print_success "webkit2gtk, javascriptcore e libsoup instalados"
 
 # Passo 4
 print_step "PASSO 4: Instalar GTK e dependências gráficas"
