@@ -61,7 +61,22 @@ fi
 
 # 1. Atualizar sistema
 print_step "1/7 - Atualizando repositórios do sistema..."
-sudo apt update -qq
+
+# Tentar atualizar normalmente
+if ! sudo apt update 2>&1; then
+    print_warning "Erro ao atualizar repositórios. Tentando corrigir..."
+    
+    # Remover repositórios problemáticos do PostgreSQL
+    print_step "Removendo repositórios antigos do PostgreSQL..."
+    sudo rm -f /etc/apt/sources.list.d/pgdg.list 2>/dev/null || true
+    sudo rm -f /etc/apt/sources.list.d/pgadmin4.list 2>/dev/null || true
+    sudo rm -f /etc/apt/sources.list.d/postgresql.list 2>/dev/null || true
+    
+    # Tentar novamente
+    print_step "Tentando atualizar novamente..."
+    sudo apt update
+fi
+
 print_success "Repositórios atualizados"
 
 # 2. Instalar dependências do Tauri
