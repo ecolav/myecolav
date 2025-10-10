@@ -46,7 +46,7 @@ source $HOME/.cargo/env
 npm install
 
 # Compilar
-npm run tauri build
+npm run tauri:build
 
 # Instalar pacote .deb
 sudo dpkg -i src-tauri/target/release/bundle/deb/*.deb
@@ -68,7 +68,7 @@ ecolav-totem
 ## Modo Desenvolvimento
 
 ```bash
-npm run tauri dev
+npm run tauri:dev
 ```
 
 ---
@@ -112,7 +112,7 @@ Após a compilação, os seguintes arquivos estarão disponíveis:
 cd myecolav
 git pull
 npm install
-npm run tauri build
+npm run tauri:build
 sudo dpkg -i src-tauri/target/release/bundle/deb/*.deb
 ```
 

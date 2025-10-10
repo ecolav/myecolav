@@ -112,7 +112,7 @@ echo "⚠️  ATENÇÃO: Esta etapa é MUITO DEMORADA!"
 echo "    Pode levar de 10 a 20 minutos na primeira vez."
 echo "    NÃO CANCELE, aguarde até o final."
 echo ""
-npm run tauri build
+npm run tauri:build
 
 if [ $? -eq 0 ]; then
     print_success "Compilação concluída!"

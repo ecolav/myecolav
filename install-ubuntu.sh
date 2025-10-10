@@ -150,7 +150,7 @@ fi
 print_step "6/7 - Compilando ECOLAV Totem (isso pode demorar alguns minutos)..."
 echo ""
 print_warning "Primeira compilação pode levar 10-15 minutos..."
-npm run tauri build
+npm run tauri:build
 
 if [ $? -eq 0 ]; then
     print_success "Compilação concluída com sucesso!"

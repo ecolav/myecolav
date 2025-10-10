@@ -86,7 +86,7 @@ npm install
 
 ```bash
 # Executar em modo desenvolvimento
-npm run tauri dev
+npm run tauri:dev
 ```
 
 Isso irá:
@@ -99,7 +99,7 @@ Isso irá:
 
 ```bash
 # Gerar pacotes de instalação
-npm run tauri build
+npm run tauri:build
 ```
 
 Isso irá gerar:
@@ -294,7 +294,7 @@ newgrp dialout
 cd myecolav
 git pull origin main
 npm install
-npm run tauri build
+npm run tauri:build
 sudo dpkg -i src-tauri/target/release/bundle/deb/ecolav-totem_0.1.0_amd64.deb
 ```
 
@@ -314,10 +314,10 @@ sudo dpkg -i ecolav-totem_amd64.deb
 
 ```bash
 # Desenvolvimento
-npm run tauri dev
+npm run tauri:dev
 
 # Build
-npm run tauri build
+npm run tauri:build
 
 # Instalar
 sudo dpkg -i src-tauri/target/release/bundle/deb/*.deb
