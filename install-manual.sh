@@ -49,9 +49,27 @@ sudo apt update
 print_success "Sistema atualizado"
 
 # Passo 3
-print_step "PASSO 3: Instalar webkit2gtk (versão 4.0 para compatibilidade)"
-sudo apt install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.0-37
-print_success "webkit2gtk instalado"
+print_step "PASSO 3: Instalar webkit2gtk e javascriptcore"
+
+# Detectar versão do Ubuntu
+UBUNTU_VERSION=$(lsb_release -rs)
+echo "Ubuntu $UBUNTU_VERSION detectado"
+
+if [[ "$UBUNTU_VERSION" == "22.04" ]] || [[ "$UBUNTU_VERSION" == "24.04" ]]; then
+    echo "Instalando versão 4.1 (Ubuntu 22.04+)..."
+    sudo apt install -y \
+        libwebkit2gtk-4.1-0 \
+        libwebkit2gtk-4.1-dev \
+        libjavascriptcoregtk-4.1-0 \
+        libjavascriptcoregtk-4.1-dev
+else
+    echo "Instalando versão 4.0 (Ubuntu 20.04)..."
+    sudo apt install -y \
+        libwebkit2gtk-4.0-dev \
+        libwebkit2gtk-4.0-37 \
+        libjavascriptcoregtk-4.0-dev
+fi
+print_success "webkit2gtk e javascriptcore instalados"
 
 # Passo 4
 print_step "PASSO 4: Instalar GTK e dependências gráficas"
