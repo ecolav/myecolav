@@ -51,6 +51,14 @@ jobs:
             pkg-config \
             build-essential \
             curl wget file patchelf rpm
+          
+          # Verificar instalação
+          echo "Verificando pkg-config..."
+          pkg-config --modversion libsoup-2.4 || echo "libsoup-2.4 não encontrado"
+          
+          # Configurar PKG_CONFIG_PATH
+          export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:$PKG_CONFIG_PATH
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Install JS deps
         run: npm ci
