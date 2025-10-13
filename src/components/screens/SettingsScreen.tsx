@@ -39,7 +39,41 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
     setStatusMsg(s => ({ ...s, [device]: 'Detectando dispositivos...' }));
 
     try {
-      if (settings.scale.mode === 'rs232' || settings.rfid.access === 'serial') {
+      if (device === 'scale' && settings.scale.mode === 'rs232') {
+        // Para Linux/Totem, verificar servidor HTTP da balança ao invés de Web Serial API
+        try {
+          const response = await fetch('http://localhost:3001/scale/weight');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.connected) {
+              setStatus(s => ({ ...s, [device]: 'success' }));
+              setStatusMsg(s => ({ ...s, [device]: `✅ Balança detectada em /dev/ttyS0 - Peso: ${data.weight.toFixed(2)} kg` }));
+              
+              // Configurar automaticamente
+              setSettings(s => ({ 
+                ...s, 
+                scale: { 
+                  ...s.scale, 
+                  port: '/dev/ttyS0',
+                  baudRate: 9600,
+                  dataBits: 8,
+                  parity: 'none',
+                  stopBits: 1
+                } 
+              }));
+            } else {
+              setStatus(s => ({ ...s, [device]: 'error' }));
+              setStatusMsg(s => ({ ...s, [device]: '⚠️ Servidor rodando mas balança desconectada' }));
+            }
+          } else {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: '❌ Servidor não responde' }));
+          }
+        } catch (error) {
+          setStatus(s => ({ ...s, [device]: 'error' }));
+          setStatusMsg(s => ({ ...s, [device]: '❌ Servidor de balança não encontrado. Execute: node scale-server.cjs' }));
+        }
+      } else if (settings.rfid.access === 'serial') {
         await requestSerialPortPermission();
         const ports = await listSerialPorts();
         
@@ -47,10 +81,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           setStatus(s => ({ ...s, [device]: 'success' }));
           setStatusMsg(s => ({ ...s, [device]: `${ports.length} porta(s) encontrada(s): ${ports.join(', ')}` }));
           
-          // Auto-select first port
-          if (device === 'scale' && !settings.scale.port) {
-            setSettings(s => ({ ...s, scale: { ...s.scale, port: ports[0] } }));
-          }
           if (device === 'rfid' && !settings.rfid.port) {
             setSettings(s => ({ ...s, rfid: { ...s.rfid, port: ports[0] } }));
           }
@@ -516,6 +546,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                     <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
                       🔌 Configurações RS232 (Serial)
                     </h3>
+                    
+                    {/* Alerta informativo sobre porta detectada */}
+                    {settings.scale.port === '/dev/ttyS0' && (
+                      <div className="mb-4 p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <div className="font-semibold text-green-900">Balança Detectada em /dev/ttyS0</div>
+                            <div className="text-sm text-green-700 mt-1">
+                              Protocolo H/L detectado. Configuração otimizada: 9600 baud, 8 bits, sem paridade.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                       <div>
                         <label className="block text-sm font-semibold text-blue-900 mb-2">Porta</label>
@@ -524,7 +570,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                           className="w-full px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                           value={settings.scale.port || ''}
                           onChange={(e) => setSettings(s => ({ ...s, scale: { ...s.scale, port: e.target.value } }))}
-                          placeholder="COM1"
+                          placeholder="/dev/ttyS0"
                         />
                       </div>
                       <div>

@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { apiRequest, API_CONFIG } from '../config/api';
 import { getDriverByLabel } from '../utils/scaleDrivers';
 
+// Importar comandos Tauri se disponível
+const invoke = typeof window !== 'undefined' && (window as any).__TAURI__?.invoke;
+
 export type ScaleConnectionMode = 'mock' | 'rs232' | 'usb' | 'tcpip';
 
 export interface ScaleConfig {
@@ -112,10 +115,35 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
       try {
         if (driver) {
           const r = await driver.test({ ...config });
-          // Extrair número do RAW de forma simples
-          const m = r.raw.match(/([0-9]+(?:\.[0-9]+)?)/);
-          const val = m ? Number(m[1]) : Number((Math.random()*0.2).toFixed(2));
-          setWeight(Math.max(0, val));
+          // Extrair número do RAW - suporte ao formato H/L (ex: H0000.15)
+          const hlMatch = r.raw.match(/^[HL]([0-9]+(?:\.[0-9]+)?)/i);
+          if (hlMatch) {
+            setWeight(Math.max(0, Number(hlMatch[1])));
+          } else {
+            // Fallback para formato genérico
+            const m = r.raw.match(/([0-9]+(?:\.[0-9]+)?)/);
+            const val = m ? Number(m[1]) : Number((Math.random()*0.2).toFixed(2));
+            setWeight(Math.max(0, val));
+          }
+        } else if (config.mode === 'rs232') {
+          // Usar servidor HTTP local para ler a balança
+          try {
+            const response = await fetch('http://localhost:3001/scale/weight');
+            if (response.ok) {
+              const data = await response.json();
+              setWeight(Math.max(0, data.weight));
+              setConnected(data.connected);
+            } else {
+              setConnected(false);
+            }
+          } catch (error) {
+            // Servidor não está rodando
+            if (!serialReaderAbort.current) {
+              console.warn('⚠️  Servidor de balança não encontrado. Execute: node scale-server.js');
+              serialReaderAbort.current = () => {}; // Evitar spam de logs
+            }
+            setConnected(false);
+          }
         } else if (config.mode === 'rs232' && (navigator as any)?.serial?.getPorts) {
           // Usar Web Serial se houver porta autorizada
           if (serialReaderAbort.current || serialClose.current) return; // já conectado
@@ -152,8 +180,15 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
                     while ((idx = buffer.indexOf('\n')) >= 0) {
                       const line = buffer.slice(0, idx).trim();
                       buffer = buffer.slice(idx + 1);
-                      const mm = line.match(/([0-9]+(?:\.[0-9]+)?)/);
-                      if (mm) setWeight(Math.max(0, Number(mm[1])));
+                      // Suporte ao formato H/L (ex: H0000.15 ou L0000.10)
+                      const hlMatch = line.match(/^[HL]([0-9]+(?:\.[0-9]+)?)/i);
+                      if (hlMatch) {
+                        setWeight(Math.max(0, Number(hlMatch[1])));
+                      } else {
+                        // Fallback para formato genérico
+                        const mm = line.match(/([0-9]+(?:\.[0-9]+)?)/);
+                        if (mm) setWeight(Math.max(0, Number(mm[1])));
+                      }
                     }
                   }
                 }

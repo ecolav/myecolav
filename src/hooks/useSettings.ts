@@ -65,9 +65,9 @@ export interface Settings {
 }
 
 const DEFAULTS: Settings = {
-  scale: { name: 'Balança Rouparia 01', model: '', deviceType: 'plataforma', mode: 'mock', port: 'COM1', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
+  scale: { name: 'Balança Rouparia 01', model: 'Balança Genérica (Protocolo H/L)', deviceType: 'plataforma', mode: 'rs232', port: '/dev/ttyS0', baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 },
   printer: { defaultPrinter: '', emulateESCPos: true },
-  rfid: { access: 'serial', port: 'COM3', baudRate: 115200 },
+  rfid: { access: 'serial', port: '/dev/ttyS1', baudRate: 115200 },
   server: { baseUrl: 'http://162.240.227.159:4000', apiKey: 'aa439ecb1dc29734874073b8bf581f528acb4e5c179b11ea', companyId: '' },
   totem: { type: 'dirty', mode: 'collection', clientId: undefined },
   network: { enabled: false, port: 3000, host: '0.0.0.0', autoStart: false },

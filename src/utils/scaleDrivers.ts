@@ -39,6 +39,29 @@ export const SCALE_DRIVERS: ScaleDriver[] = [
       const raw = JSON.stringify({ weight: Number((Math.random()*5+0.5).toFixed(2)), unit: 'kg', status: 'OK' });
       return { ok: true, raw };
     }
+  },
+  {
+    id: 'custom-hl-protocol',
+    label: 'Balança Genérica (Protocolo H/L)',
+    mode: 'rs232',
+    defaults: { baudRate: 9600, parity: 'none' },
+    async test() {
+      // Testar servidor HTTP local que lê a balança real
+      try {
+        const response = await fetch('http://localhost:3001/scale/weight');
+        if (response.ok) {
+          const data = await response.json();
+          return { 
+            ok: data.connected, 
+            raw: `✅ Peso: ${data.weight.toFixed(2)} kg - ${data.connected ? 'Conectado (/dev/ttyS0)' : '❌ Desconectado'}` 
+          };
+        } else {
+          return { ok: false, raw: '❌ Servidor não responde' };
+        }
+      } catch (error) {
+        return { ok: false, raw: '❌ Servidor de balança não encontrado. Execute: node scale-server.cjs' };
+      }
+    }
   }
 ];
 

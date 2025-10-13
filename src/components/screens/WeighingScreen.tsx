@@ -247,6 +247,7 @@ export const WeighingScreen: React.FC<WeighingScreenProps> = ({ onBack }) => {
         onBack={onBack}
         entries={entries}
         cages={cages}
+        clothingType={clothingType}
         targetKg={yesterdayTargetKg}
         progressPercent={(yesterdayTargetKg > 0 ? (entries.reduce((s, e) => s + e.net, 0) / yesterdayTargetKg) * 100 : 0)}
         onCageSelected={(id: string) => setSelectedCageId(id)}

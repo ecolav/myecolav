@@ -43,6 +43,7 @@ export interface WeighingFormViewProps {
   onBack: () => void;
   entries: WeighingEntry[];
   cages: CageItem[];
+  clothingType?: 'limpa' | 'suja' | null;
   targetKg?: number;
   progressPercent?: number;
   onCageSelected?: (id: string) => void;
@@ -73,6 +74,7 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
   onBack,
   entries,
   cages,
+  clothingType,
   targetKg = 0,
   progressPercent = 0,
   onCageSelected
@@ -196,8 +198,15 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
             </div>
             <div className="col-span-1 text-center">
               <div className="text-2xl font-extrabold text-gray-900">{totalPieces} <span className="text-lg font-bold">peças</span></div>
-              <div className="text-sm text-gray-600 mt-1">Meta: {targetKg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg</div>
-              <div className="text-sm text-gray-600">Progresso: {Math.max(0, Math.min(100, Number(progressPercent?.toFixed?.(2) ?? 0)))}%</div>
+              {clothingType === 'limpa' && (
+                <>
+                  <div className="text-sm text-gray-600 mt-1">Meta: {targetKg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg</div>
+                  <div className="text-sm text-gray-600">Progresso: {Math.max(0, Math.min(100, Number(progressPercent?.toFixed?.(2) ?? 0)))}%</div>
+                </>
+              )}
+              {clothingType === 'suja' && (
+                <div className="text-sm text-gray-500 mt-1 italic">Roupa suja - Sem meta comparativa</div>
+              )}
             </div>
             <div className="col-span-1 flex items-center justify-end gap-2">
               {isDev && (
