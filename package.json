@@ -14,7 +14,7 @@
     "serve": "node server.cjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/api": "^1.5.0",
     "express": "^4.21.2",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
-    "@tauri-apps/cli": "^2.8.1",
+    "@tauri-apps/cli": "^1.5.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
