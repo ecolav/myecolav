@@ -79,55 +79,54 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
   progressPercent = 0,
   onCageSelected
 }) => {
-  const totalGross = entries.reduce((sum, e) => sum + e.gross, 0);
+  const totalNet = entries.reduce((sum, e) => sum + e.net, 0); // Peso líquido (sem tara)
   const totalPieces = entries.reduce((sum, e) => sum + e.pieceCount, 0);
   const [manualOpen, setManualOpen] = useState(false);
   const [cageOpen, setCageOpen] = useState(false);
   const isDev = (import.meta as any)?.env?.DEV ?? false;
   const hasRfid = Object.keys(rfidCounts).length > 0;
   return (
-    <main className="p-3">
+    <main className="p-2">
       {step === 'weighing' && (
-        <div className="space-y-3">
-          {/* Barra 1: Campos compactos - ajuste touch +4px */}
-          <div className="flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-md px-3 py-3 shadow-sm">
+        <div className="space-y-2">
+          {/* Barra 1: Campos otimizados para touch 15" */}
+          <div className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-md px-3 py-2 shadow-sm">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-widest text-gray-700">PESO (kg)</span>
+              <span className="text-base font-bold tracking-wide text-gray-700">PESO</span>
               <input
                 readOnly
                 value={weight.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                className="w-28 h-10 px-3 border border-gray-300 rounded text-right text-base font-bold"
+                className="w-32 min-h-[48px] px-3 border-2 border-gray-400 rounded text-right text-xl font-bold bg-yellow-50"
               />
-              {/* Campos da lógica mapeados em visual compacto */}
               <input
                 type="text"
                 value={cageBarcode}
                 onChange={(e) => onCageBarcodeChange(e.target.value)}
-                placeholder="Código da gaiola"
-                className="w-32 h-10 px-3 border border-gray-300 rounded text-base"
+                placeholder="Código"
+                className="w-28 min-h-[48px] px-2 border border-gray-300 rounded text-base"
               />
-              <Button size="md" variant="secondary" onClick={() => setCageOpen(true)}>Gaiola</Button>
+              <Button size="lg" variant="secondary" onClick={() => setCageOpen(true)}>Gaiola</Button>
               <input
                 type="text"
                 step="0.01"
                 value={cageTare}
                 readOnly
                 onClick={() => setManualOpen(true)}
-                placeholder="Tara (kg)"
-                className="w-28 h-10 px-3 border border-gray-300 rounded text-base cursor-pointer"
+                placeholder="Tara"
+                className="w-24 min-h-[48px] px-2 border border-gray-300 rounded text-base cursor-pointer"
               />
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {!connected && (
-                <div className="flex items-center gap-2 text-base text-red-700 font-semibold">
-                  <span>Balança Desconectada</span>
-                  <span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>
+                <div className="flex items-center gap-2 text-lg text-red-700 font-bold">
+                  <span className="inline-block w-5 h-5 rounded-full bg-red-500"></span>
+                  <span>Desconectado</span>
                 </div>
               )}
               {isStable && (
-                <div className="flex items-center gap-2 text-base text-green-700 font-semibold">
-                  <span className="inline-block w-4 h-4 rounded-full bg-green-500 animate-pulse"></span>
-                  <span>✓ Estável</span>
+                <div className="flex items-center gap-2 text-lg text-green-700 font-bold">
+                  <span className="inline-block w-5 h-5 rounded-full bg-green-500 animate-pulse"></span>
+                  <span>ESTÁVEL</span>
                 </div>
               )}
             </div>
@@ -140,80 +139,72 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
             <span className="px-3 py-1.5 rounded border border-blue-500 bg-blue-600 text-white text-sm font-semibold">Pesagem</span>
           </div>
 
-          {/* Duas colunas - formato perfeito para RFID */}
-          <div className={"grid grid-cols-2 gap-3"}>
+          {/* Duas colunas otimizadas para 15" */}
+          <div className={"grid grid-cols-2 gap-2"}>
             {/* Esquerda: tabela de tipos x quantidade (usa rfidCounts) */}
             <div className="border border-gray-200 bg-white rounded-md overflow-hidden shadow-sm">
               <div className="grid grid-cols-2 text-base bg-gray-100 border-b border-gray-200">
-                <div className="px-4 py-3 font-bold text-gray-800">Tipo de roupa</div>
-                <div className="px-4 py-3 font-bold text-gray-800">Peças</div>
+                <div className="px-3 py-2 font-bold text-gray-800">Tipo de roupa</div>
+                <div className="px-3 py-2 font-bold text-gray-800">Peças</div>
               </div>
               {(hasRfid && rfidEnabled) ? (
                 <div className="divide-y divide-gray-200">
                   {Object.entries(rfidCounts).map(([type, count]) => (
-                    <div key={type} className="grid grid-cols-2 text-base">
-                      <div className="px-4 py-3 text-gray-700">{type}</div>
-                      <div className="px-4 py-3 font-semibold text-blue-700">{count}</div>
+                    <div key={type} className="grid grid-cols-2 text-lg">
+                      <div className="px-3 py-3 text-gray-700">{type}</div>
+                      <div className="px-3 py-3 font-bold text-blue-700">{count}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="h-80 flex items-center justify-center text-gray-500 text-base">{rfidEnabled ? 'Aguardando RFID...' : 'RFID desativado'}</div>
+                <div className="h-48 flex items-center justify-center text-gray-500 text-lg">{rfidEnabled ? 'Aguardando RFID...' : 'RFID desativado'}</div>
               )}
             </div>
 
-            {/* Direita: tabela de entradas (gaiolas) */}
+            {/* Direita: tabela de entradas (gaiolas) - SIMPLIFICADA */}
             <div className="border border-gray-200 bg-white rounded-md overflow-hidden shadow-sm">
-              <div className="grid grid-cols-6 text-sm bg-gray-100 border-b border-gray-200">
-                <div className="px-3 py-3 font-bold text-gray-800">Gaiola</div>
-                <div className="px-3 py-3 font-bold text-gray-800">Líquido (kg)</div>
-                <div className="px-3 py-3 font-bold text-gray-800">Peças</div>
-                <div className="px-3 py-3 font-bold text-gray-800">Horário</div>
-                <div className="px-3 py-3 font-bold text-gray-800">RFID(s)</div>
-                <div className="px-3 py-3 font-bold text-gray-800">...</div>
+              <div className="grid grid-cols-4 text-base bg-gray-100 border-b border-gray-200">
+                <div className="px-2 py-2 font-bold text-gray-800">Gaiola</div>
+                <div className="px-2 py-2 font-bold text-gray-800">Kg</div>
+                <div className="px-2 py-2 font-bold text-gray-800">Peças</div>
+                <div className="px-2 py-2 font-bold text-gray-800">Hora</div>
               </div>
-              <div className="h-80 overflow-auto">
+              <div className="h-48 overflow-auto">
                 {entries.map((e) => (
-                  <div key={e.id} className="grid grid-cols-6 text-base border-b border-gray-200 hover:bg-blue-50">
-                    <div className="px-3 py-3 truncate font-medium text-gray-900">{e.cageCode}</div>
-                    <div className="px-3 py-3 font-bold text-blue-700">{e.net.toFixed(2)}</div>
-                    <div className="px-3 py-3 font-semibold text-gray-900">{e.pieceCount}</div>
-                    <div className="px-3 py-3 text-gray-600">{e.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-                    <div className="px-3 py-3 truncate text-xs text-gray-500">{(e as any).rfidSummary || '-'}</div>
-                    <div className="px-3 py-3"><input type="checkbox" className="w-5 h-5 accent-blue-600" /></div>
+                  <div key={e.id} className="grid grid-cols-4 text-base border-b border-gray-200 hover:bg-blue-50">
+                    <div className="px-2 py-3 truncate font-medium text-gray-900">{e.cageCode}</div>
+                    <div className="px-2 py-3 font-bold text-blue-700">{e.net.toFixed(2)}</div>
+                    <div className="px-2 py-3 font-bold text-gray-900">{e.pieceCount}</div>
+                    <div className="px-2 py-3 text-gray-600">{e.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Barra inferior com totais e ações - ajuste touch */}
-          <div className="grid grid-cols-5 items-center gap-3 bg-white border border-gray-200 rounded-md px-4 py-3 shadow-sm">
-            <div className="col-span-2 flex items-center gap-2 text-lg">
-              <span className="text-gray-700">Total de peças:</span>
-              <span className="font-bold text-blue-700">{rfidTotal}</span>
-            </div>
-            <div className="col-span-1 text-right">
-              <div className="text-3xl font-extrabold text-green-700">{totalGross.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xl font-bold text-gray-700">Kg</span></div>
+          {/* Barra inferior otimizada para touch 15" */}
+          <div className="grid grid-cols-4 items-center gap-2 bg-white border-2 border-gray-300 rounded-lg px-3 py-3 shadow-sm">
+            <div className="col-span-1 text-center">
+              <div className="text-xs text-gray-600 mb-1">RFID</div>
+              <div className="text-2xl font-bold text-blue-700">{rfidTotal}</div>
             </div>
             <div className="col-span-1 text-center">
-              <div className="text-2xl font-extrabold text-gray-900">{totalPieces} <span className="text-lg font-bold">peças</span></div>
-              {clothingType === 'limpa' && (
-                <>
-                  <div className="text-sm text-gray-600 mt-1">Meta: {targetKg.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg</div>
-                  <div className="text-sm text-gray-600">Progresso: {Math.max(0, Math.min(100, Number(progressPercent?.toFixed?.(2) ?? 0)))}%</div>
-                </>
-              )}
-              {clothingType === 'suja' && (
-                <div className="text-sm text-gray-500 mt-1 italic">Roupa suja - Sem meta comparativa</div>
+              <div className="text-xs text-gray-600 mb-1">TOTAL LÍQUIDO</div>
+              <div className="text-2xl font-bold text-green-700">{totalNet.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div className="col-span-1 text-center">
+              <div className="text-xs text-gray-600 mb-1">PEÇAS</div>
+              <div className="text-2xl font-bold text-gray-900">{totalPieces}</div>
+              {clothingType === 'limpa' && targetKg > 0 && (
+                <div className="text-xs text-gray-600 mt-1">{Math.round(progressPercent)}% de {targetKg} kg</div>
               )}
             </div>
-            <div className="col-span-1 flex items-center justify-end gap-2">
+            <div className="col-span-1 flex flex-col gap-2">
               {isDev && (
-                <Button onClick={onSimulateRfid} disabled={isRfidReading} variant="secondary" size="md">Iniciar</Button>
+                <Button onClick={onSimulateRfid} disabled={isRfidReading} variant="secondary" size="lg" fullWidth>RFID</Button>
               )}
-              <Button onClick={onCaptureWeighing} disabled={weight <= 0 || (!isStable)} variant="success" size="md">Pesar</Button>
-              <Button onClick={onFinalize} disabled={entries.length === 0} variant="primary" size="md">Finalizar</Button>
+              <Button onClick={onCaptureWeighing} disabled={weight <= 0 || (!isStable)} variant="success" size="lg" fullWidth>PESAR</Button>
+              <Button onClick={onFinalize} disabled={entries.length === 0} variant="primary" size="lg" fullWidth>FINALIZAR</Button>
             </div>
           </div>
         </div>

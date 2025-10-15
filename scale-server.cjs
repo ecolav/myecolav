@@ -66,15 +66,16 @@ function readScale() {
       const data = line.trim();
       console.log('📥 Dados recebidos:', JSON.stringify(data));
       
-      // Formato: H0000.15 ou L0000.10
-      if (data.length > 1 && /^[HLhl]/.test(data)) {
+      // Formato: H0000.15, L0000.10, F0000.00 (fixo), D0000.00 (dinâmico)
+      if (data.length > 1 && /^[HLFDhlfd]/.test(data)) {
         const weightStr = data.substring(1);
         const weight = parseFloat(weightStr);
         
         if (!isNaN(weight)) {
           lastWeight = weight;
           connected = true;
-          console.log(`⚖️  Peso: ${weight.toFixed(2)} kg`);
+          const status = data[0].toUpperCase() === 'F' ? '✓' : (data[0].toUpperCase() === 'D' ? '~' : '');
+          console.log(`⚖️  Peso: ${weight.toFixed(2)} kg ${status}`);
         }
       } else {
         console.log('⚠️  Formato não reconhecido');

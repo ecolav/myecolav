@@ -57,6 +57,9 @@ fn start_scale_reader(port: String, _baud_rate: u32, state: State<ScaleState>) -
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // Iniciar o servidor da balança automaticamente
+  start_scale_server();
+  
   tauri::Builder::default()
     .manage(ScaleState {
         last_weight: Arc::new(Mutex::new(0.0)),
@@ -65,4 +68,35 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![read_scale_weight, start_scale_reader])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+// Função para iniciar o servidor Node.js da balança
+fn start_scale_server() {
+    use std::process::Command;
+    use std::thread;
+    
+    thread::spawn(|| {
+        // Verificar se o servidor já está rodando
+        let check = Command::new("pgrep")
+            .args(&["-f", "scale-server.cjs"])
+            .output();
+            
+        if let Ok(output) = check {
+            if !output.stdout.is_empty() {
+                println!("✅ Servidor da balança já está rodando");
+                return;
+            }
+        }
+        
+        // Iniciar o servidor
+        println!("🚀 Iniciando servidor da balança...");
+        let result = Command::new("node")
+            .arg("/home/idtrack/myecolav/scale-server.cjs")
+            .spawn();
+            
+        match result {
+            Ok(_) => println!("✅ Servidor da balança iniciado!"),
+            Err(e) => eprintln!("❌ Erro ao iniciar servidor da balança: {}", e),
+        }
+    });
 }
