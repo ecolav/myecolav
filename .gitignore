@@ -16,3 +16,13 @@ Thumbs.db
 .env
 .env.*.local
 coverage/
+
+# Scripts e arquivos temporários de ajuda
+push-*.sh
+*CHAVE*.txt
+*SUBIR*.txt
+*TOKEN*.txt
+*RAPIDO*.txt
+patches/
+alteracoes-*.tar.gz
+RESUMO_ALTERACOES.md
