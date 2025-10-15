@@ -26,3 +26,21 @@ push-*.sh
 patches/
 alteracoes-*.tar.gz
 RESUMO_ALTERACOES.md
+
+# Documentação temporária
+*_RELEASE*.txt
+*_GITHUB*.txt
+*_ACTIONS*.txt
+*_JOBS*.txt
+ESTADO_ATUAL.txt
+SOLUCAO_RAPIDA.txt
+RODAR_BUILD_TESTE.txt
+LIMPAR_FILA_GITHUB.txt
+CANCELAR_*.txt
+CHECK_*.txt
+INSTRUCOES_*.txt
+INSTALAR_*.txt
+PROBLEMA_*.txt
+criar-release.sh
+release-*/
+*.tar.gz
