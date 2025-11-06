@@ -30,7 +30,10 @@ export function useClients(): UseClientsResult {
     setError(null);
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.PUBLIC.CLIENTS}`, {
-        headers: { 'x-api-key': API_CONFIG.API_KEY }
+        headers: { 
+          'x-api-key': API_CONFIG.API_KEY,
+          'Accept': 'application/json'
+        }
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const payload = await res.json();

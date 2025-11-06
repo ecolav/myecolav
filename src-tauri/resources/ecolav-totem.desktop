@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ECOLAV Totem
+Comment=Sistema de Totem Touch Screen para Ecolav 360
+Exec=ecolav-totem
+Icon=ecolav-totem
+Terminal=false
+Categories=Application;Utility;
+StartupNotify=true
+StartupWMClass=ecolav-totem
+X-GNOME-Autostart-enabled=false
+
+

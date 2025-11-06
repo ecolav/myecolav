@@ -15,7 +15,15 @@ export const API_CONFIG = {
       WEIGHINGS: '/api/public/totem/pesagens',
       REPORT: '/api/public/totem/pesagens/relatorio',
       DISTRIBUTE: '/api/public/totem/distribute',
-      ORDERS: '/api/public/totem/orders'
+      ORDERS: '/api/public/totem/orders',
+      RFID_LOOKUP: '/api/public/totem/rfid/lookup',
+      RFID_PENDING_BATCHES: '/api/public/totem/rfid/pending-batches',
+      RFID_ASSOCIATE_BATCH: (batchNumber: string | number) =>
+        `/api/public/totem/rfid/batch/${batchNumber}/associate`,
+      RFID_ASSOCIATE_TAG: '/api/public/totem/rfid/associate-tag',
+      LAUNDRY_EXPURGO_QUEUE: '/api/public/totem/laundry/expurgo',
+      LAUNDRY_EXPURGO_READ: '/api/public/totem/laundry/expurgo/read',
+      LAUNDRY_COMPARATIVE: '/api/public/totem/laundry/comparative'
     },
     // Público (consulta)
     PUBLIC: {

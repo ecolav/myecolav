@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft, Settings as SettingsIcon, Scale, Printer, Radio, 
   Server, Wifi, Search, RefreshCw, AlertCircle, 
@@ -25,13 +25,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const [status, setStatus] = useState<Record<string, ConnectionStatus>>({});
   const [statusMsg, setStatusMsg] = useState<Record<string, string>>({});
   const [detecting, setDetecting] = useState(false);
+  const [rfidModalOpen, setRfidModalOpen] = useState(false);
+  const [testingUr4, setTestingUr4] = useState(false);
+  const [rfidFeedback, setRfidFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  // Auto-detect devices on mount
-  useEffect(() => {
-    if (tab === 'scale' && settings.scale.mode !== 'mock') {
-      detectDevices('scale');
-    }
-  }, [tab, settings.scale.mode]);
+  // Auto-detect removido - causava loop infinito
+  // Usuário deve clicar manualmente em "Detectar Portas Seriais"
 
   const detectDevices = async (device: 'scale' | 'printer' | 'rfid') => {
     setDetecting(true);
@@ -39,77 +38,152 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
     setStatusMsg(s => ({ ...s, [device]: 'Detectando dispositivos...' }));
 
     try {
-      if (device === 'scale' && settings.scale.mode === 'rs232') {
-        // Para Linux/Totem, verificar servidor HTTP da balança ao invés de Web Serial API
-        try {
-          const response = await fetch('http://localhost:3001/scale/weight');
-          if (response.ok) {
-            const data = await response.json();
-            if (data.connected) {
-              setStatus(s => ({ ...s, [device]: 'success' }));
-              setStatusMsg(s => ({ ...s, [device]: `✅ Balança detectada em /dev/ttyS0 - Peso: ${data.weight.toFixed(2)} kg` }));
-              
-              // Configurar automaticamente
-              setSettings(s => ({ 
-                ...s, 
-                scale: { 
-                  ...s.scale, 
-                  port: '/dev/ttyS0',
-                  baudRate: 9600,
-                  dataBits: 8,
-                  parity: 'none',
-                  stopBits: 1
-                } 
-              }));
-            } else {
+      if (device === 'scale') {
+        if (settings.scale.mode === 'rs232') {
+          // Verificar se o servidor está rodando
+          try {
+            const healthCheck = await fetch('http://localhost:3001/scale/weight');
+            if (!healthCheck.ok) {
               setStatus(s => ({ ...s, [device]: 'error' }));
-              setStatusMsg(s => ({ ...s, [device]: '⚠️ Servidor rodando mas balança desconectada' }));
+              setStatusMsg(s => ({ ...s, [device]: '❌ Servidor de balança não encontrado. Execute: npm run scale:server' }));
+              return;
             }
-          } else {
+          } catch (error) {
             setStatus(s => ({ ...s, [device]: 'error' }));
-            setStatusMsg(s => ({ ...s, [device]: '❌ Servidor não responde' }));
+            setStatusMsg(s => ({ ...s, [device]: '❌ Servidor de balança não encontrado. Execute: npm run scale:server' }));
+            return;
           }
-        } catch (error) {
-          setStatus(s => ({ ...s, [device]: 'error' }));
-          setStatusMsg(s => ({ ...s, [device]: '❌ Servidor de balança não encontrado. Execute: node scale-server.cjs' }));
-        }
-      } else if (settings.rfid.access === 'serial') {
-        await requestSerialPortPermission();
-        const ports = await listSerialPorts();
-        
-        if (ports.length > 0) {
-          setStatus(s => ({ ...s, [device]: 'success' }));
-          setStatusMsg(s => ({ ...s, [device]: `${ports.length} porta(s) encontrada(s): ${ports.join(', ')}` }));
-          
-          if (device === 'rfid' && !settings.rfid.port) {
-            setSettings(s => ({ ...s, rfid: { ...s.rfid, port: ports[0] } }));
+
+          setStatusMsg(s => ({ ...s, [device]: 'Listando portas seriais...' }));
+
+          // Listar todas as portas disponíveis
+          const portsResponse = await fetch('http://localhost:3001/scale/ports');
+          if (!portsResponse.ok) {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: '❌ Erro ao listar portas' }));
+            return;
           }
-        } else {
-          setStatus(s => ({ ...s, [device]: 'error' }));
-          setStatusMsg(s => ({ ...s, [device]: 'Nenhuma porta serial encontrada' }));
-        }
-      } else if (settings.scale.mode === 'usb') {
-        await requestUsbDevicePermission();
-        const devices = await listUsbDevices();
-        
-        if (devices.length > 0) {
-          setStatus(s => ({ ...s, [device]: 'success' }));
-          setStatusMsg(s => ({ ...s, [device]: `${devices.length} dispositivo(s) USB encontrado(s)` }));
-          
-          // Auto-select first device
-          if (device === 'scale' && devices[0]) {
+
+          const portsData = await portsResponse.json();
+          const ports: Array<{ path: string; baudRate?: number }> = portsData.ports || [];
+
+          if (ports.length === 0) {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: '❌ Nenhuma porta serial encontrada' }));
+            return;
+          }
+
+          setStatusMsg(s => ({ ...s, [device]: `Testando ${ports.length} porta(s)...` }));
+          console.log(`🔍 Encontradas ${ports.length} portas:`, ports.map(p => p.path).join(', '));
+
+          // Testar cada porta para ver qual responde
+          let foundPort = null;
+          for (const portInfo of ports) {
+            setStatusMsg(s => ({ ...s, [device]: `Testando ${portInfo.path}...` }));
+            console.log(`🔍 Testando porta: ${portInfo.path}`);
+
+            try {
+              const testResponse = await fetch('http://localhost:3001/scale/test-port', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  path: portInfo.path, 
+                  baudRate: settings.scale.baudRate || 9600 
+                })
+              });
+
+              const testResult = await testResponse.json();
+              console.log(`📊 Resultado teste ${portInfo.path}:`, testResult);
+
+              if (testResult.success) {
+                foundPort = testResult;
+                break;
+              }
+            } catch (error) {
+              console.log(`❌ Erro ao testar ${portInfo.path}:`, error);
+            }
+          }
+
+          if (foundPort) {
+            // Balança encontrada! Salvar configuração e mudar porta no servidor
+            console.log(`✅ Balança encontrada em ${foundPort.path}!`);
+            
+            setStatus(s => ({ ...s, [device]: 'success' }));
+            setStatusMsg(s => ({ ...s, [device]: `✅ Balança detectada em ${foundPort.path} - Peso: ${foundPort.weight.toFixed(2)} kg` }));
+            
+            // Salvar nas configurações
             setSettings(s => ({ 
               ...s, 
               scale: { 
                 ...s.scale, 
-                vendorId: devices[0].vendorId,
-                productId: devices[0].productId
+                port: foundPort.path,
+                baudRate: foundPort.baudRate,
+                dataBits: 8,
+                parity: 'none',
+                stopBits: 1
               } 
             }));
+
+            // Mudar porta no servidor
+            await fetch('http://localhost:3001/scale/change-port', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                path: foundPort.path, 
+                baudRate: foundPort.baudRate 
+              })
+            });
+
+          } else {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: `❌ Nenhuma balança respondeu nas ${ports.length} porta(s) testadas` }));
           }
+        } else if (settings.scale.mode === 'usb') {
+          await requestUsbDevicePermission();
+          const devices = await listUsbDevices();
+          
+          if (devices.length > 0) {
+            setStatus(s => ({ ...s, [device]: 'success' }));
+            setStatusMsg(s => ({ ...s, [device]: `${devices.length} dispositivo(s) USB encontrado(s)` }));
+            
+            // Auto-select first device
+            if (devices[0]) {
+              setSettings(s => ({ 
+                ...s, 
+                scale: { 
+                  ...s.scale, 
+                  vendorId: devices[0].vendorId,
+                  productId: devices[0].productId
+                } 
+              }));
+            }
+          } else {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: 'Nenhum dispositivo USB encontrado' }));
+          }
+        }
+      } else if (device === 'rfid') {
+        if (settings.rfid.readerModel === 'chainway-ur4') {
+          setStatus(s => ({ ...s, rfid: 'success' }));
+          setStatusMsg(s => ({
+            ...s,
+            rfid: `Leitor UR4 configurado para ${settings.rfid.chainwayUr4.host}:${settings.rfid.chainwayUr4.port}`
+          }));
         } else {
-          setStatus(s => ({ ...s, [device]: 'error' }));
-          setStatusMsg(s => ({ ...s, [device]: 'Nenhum dispositivo USB encontrado' }));
+          await requestSerialPortPermission();
+          const ports = await listSerialPorts();
+          
+          if (ports.length > 0) {
+            setStatus(s => ({ ...s, [device]: 'success' }));
+            setStatusMsg(s => ({ ...s, [device]: `${ports.length} porta(s) encontrada(s): ${ports.join(', ')}` }));
+            
+            if (!settings.rfid.port) {
+              setSettings(s => ({ ...s, rfid: { ...s.rfid, port: ports[0] } }));
+            }
+          } else {
+            setStatus(s => ({ ...s, [device]: 'error' }));
+            setStatusMsg(s => ({ ...s, [device]: 'Nenhuma porta serial encontrada' }));
+          }
         }
       }
     } catch (error) {
@@ -127,6 +201,47 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
     try {
       switch (device) {
         case 'scale':
+          // Se for RS232 e tiver porta configurada, testar via servidor
+          if (settings.scale.mode === 'rs232' && settings.scale.port) {
+            try {
+              setStatusMsg(s => ({ ...s, [device]: `Testando ${settings.scale.port}...` }));
+              
+              const testResponse = await fetch('http://localhost:3001/scale/test-port', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  path: settings.scale.port, 
+                  baudRate: settings.scale.baudRate || 9600 
+                })
+              });
+
+              const testResult = await testResponse.json();
+
+              if (testResult.success) {
+                setStatus(s => ({ ...s, [device]: 'success' }));
+                setStatusMsg(s => ({ ...s, [device]: `✅ Balança OK - Peso: ${testResult.weight.toFixed(2)} kg` }));
+                
+                // Mudar porta no servidor
+                await fetch('http://localhost:3001/scale/change-port', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    path: settings.scale.port, 
+                    baudRate: settings.scale.baudRate || 9600 
+                  })
+                });
+              } else {
+                setStatus(s => ({ ...s, [device]: 'error' }));
+                setStatusMsg(s => ({ ...s, [device]: `❌ ${testResult.error || 'Porta não responde'}` }));
+              }
+            } catch (error) {
+              setStatus(s => ({ ...s, [device]: 'error' }));
+              setStatusMsg(s => ({ ...s, [device]: '❌ Servidor não encontrado. Execute: npm run scale:server' }));
+            }
+            break;
+          }
+          
+          // Testar via driver
           const driver = getDriverByLabel(settings.scale.model);
           if (driver) {
             const result = await driver.test({ ...settings.scale });
@@ -814,15 +929,352 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           )}
 
           {/* Outras tabs simplificadas... */}
-          {(tab === 'printer' || tab === 'rfid' || tab === 'network') && (
+          {tab === 'rfid' && (
+            <div className="bg-white rounded-xl shadow-sm p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Radio className="w-6 h-6 text-green-600" />
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Leitor RFID</h2>
+                    <p className="text-sm text-gray-600">
+                      Configure o dispositivo responsável pelas leituras RFID neste totem.
+                    </p>
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => setRfidModalOpen(true)}>
+                  Trocar leitor
+                </Button>
+              </div>
+
+              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">Leitor selecionado</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {settings.rfid.readerModel === 'chainway-ur4'
+                      ? 'Chainway UR4 (Ethernet)'
+                      : 'Leitor Serial Genérico'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {settings.rfid.readerModel === 'chainway-ur4'
+                      ? 'Conexão via rede com múltiplas antenas e potência configurável.'
+                      : 'Conexão direta pela porta serial / USB do totem.'}
+                  </p>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="font-semibold text-gray-700">Modo de acesso:</span>{' '}
+                  {settings.rfid.access === 'serial' ? 'Serial' : settings.rfid.access === 'tcpip' ? 'TCP/IP' : 'USB'}
+                </div>
+              </div>
+
+              {settings.rfid.readerModel === 'chainway-ur4' ? (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">Configuração Chainway UR4</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          IP do leitor
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.rfid.chainwayUr4.host}
+                          onChange={e => {
+                            const value = e.target.value;
+                            setSettings(s => ({
+                              ...s,
+                              rfid: {
+                                ...s.rfid,
+                                host: value,
+                                chainwayUr4: { ...s.rfid.chainwayUr4, host: value }
+                              }
+                            }));
+                            setRfidFeedback(null);
+                          }}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                          placeholder="192.168.99.201"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Endereço IP configurado na antena UR4.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Porta TCP
+                        </label>
+                        <input
+                          type="number"
+                          value={settings.rfid.chainwayUr4.port}
+                          onChange={e => {
+                            const value = Number(e.target.value);
+                            setSettings(s => ({
+                              ...s,
+                              rfid: {
+                                ...s.rfid,
+                                tcpPort: value,
+                                chainwayUr4: { ...s.rfid.chainwayUr4, port: value }
+                              }
+                            }));
+                            setRfidFeedback(null);
+                          }}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          min={1}
+                          max={65535}
+                          placeholder="8888"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Porta padrão do servidor Chainway é 8888.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Potência de leitura (dBm)
+                      </label>
+                      <input
+                        type="range"
+                        min={10}
+                        max={33}
+                        value={settings.rfid.chainwayUr4.power}
+                        onChange={e => {
+                          const value = Number(e.target.value);
+                          setSettings(s => ({
+                            ...s,
+                            rfid: {
+                              ...s.rfid,
+                              chainwayUr4: { ...s.rfid.chainwayUr4, power: value }
+                            }
+                          }));
+                          setRfidFeedback(null);
+                        }}
+                        className="w-full accent-green-600"
+                      />
+                      <div className="flex items-center justify-between text-sm text-gray-600">
+                        <span>10 dBm</span>
+                        <span className="font-semibold text-gray-900">{settings.rfid.chainwayUr4.power} dBm</span>
+                        <span>33 dBm</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Ajuste a potência conforme a distância e zona de leitura desejada.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Antenas ativas
+                      </label>
+                      <div className="grid grid-cols-4 gap-3">
+                        {[1, 2, 3, 4].map(antenna => {
+                          const isActive = settings.rfid.chainwayUr4.antennas.includes(antenna);
+                          return (
+                            <button
+                              key={antenna}
+                              onClick={() => {
+                                setSettings(s => {
+                                  const current = s.rfid.chainwayUr4.antennas;
+                                  const next = current.includes(antenna)
+                                    ? current.filter(a => a !== antenna)
+                                    : [...current, antenna].sort((a, b) => a - b);
+                                  return {
+                                    ...s,
+                                    rfid: {
+                                      ...s.rfid,
+                                      chainwayUr4: { ...s.rfid.chainwayUr4, antennas: next }
+                                    }
+                                  };
+                                });
+                                setRfidFeedback(null);
+                              }}
+                              className={`p-3 rounded-lg border-2 text-sm font-semibold transition-all ${
+                                isActive
+                                  ? 'border-green-500 bg-green-50 text-green-700'
+                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                              }`}
+                            >
+                              Antena {antenna}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Desative apenas antenas que não estão conectadas fisicamente.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={async () => {
+                        setTestingUr4(true);
+                        setRfidFeedback(null);
+                        try {
+                          const response = await fetch('http://localhost:3001/rfid/ur4/test', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              host: settings.rfid.chainwayUr4.host,
+                              port: settings.rfid.chainwayUr4.port,
+                              power: settings.rfid.chainwayUr4.power,
+                              antennas: settings.rfid.chainwayUr4.antennas
+                            })
+                          });
+
+                          if (!response.ok) {
+                            const message = await response.text();
+                            throw new Error(message || `HTTP ${response.status}`);
+                          }
+
+                          const data = await response.json().catch(() => ({}));
+                          setRfidFeedback({
+                            type: 'success',
+                            message: data.message || 'Leitor UR4 respondeu com sucesso.'
+                          });
+                        } catch (error) {
+                          const message = error instanceof Error ? error.message : 'Erro ao testar leitor.';
+                          const friendlyMessage = /Failed to fetch|NetworkError/i.test(message)
+                            ? 'Servidor de leitura não respondeu. Verifique se o serviço local está ativo (npm run scale:server).'
+                            : message;
+                          setRfidFeedback({ type: 'error', message: friendlyMessage });
+                        } finally {
+                          setTestingUr4(false);
+                        }
+                      }}
+                      variant="primary"
+                      size="sm"
+                      disabled={testingUr4}
+                    >
+                      {testingUr4 ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Testando...
+                        </span>
+                      ) : (
+                        'Testar conexão'
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                      setStatusMsg(s => ({ ...s, rfid: '' }));
+                        setStatus(s => ({ ...s, rfid: 'idle' }));
+                        detectDevices('rfid');
+                      }}
+                      variant="secondary"
+                      size="sm"
+                      disabled={detecting}
+                    >
+                      {detecting ? 'Detectando...' : 'Atualizar status'}
+                    </Button>
+                  </div>
+
+                  {(rfidFeedback || statusMsg.rfid) && (
+                    <div className="space-y-2">
+                      {rfidFeedback && (
+                        <div
+                          className={`px-4 py-3 rounded-lg border text-sm ${
+                            rfidFeedback.type === 'success'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : rfidFeedback.type === 'info'
+                              ? 'bg-blue-50 border-blue-200 text-blue-700'
+                              : 'bg-red-50 border-red-200 text-red-700'
+                          }`}
+                        >
+                          {rfidFeedback.message}
+                        </div>
+                      )}
+                      {statusMsg.rfid && (
+                        <div className="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
+                          {statusMsg.rfid}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">Configuração Serial</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Porta serial
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.rfid.port || ''}
+                          onChange={e => {
+                            const value = e.target.value;
+                            setSettings(s => ({
+                              ...s,
+                              rfid: { ...s.rfid, port: value }
+                            }));
+                            setRfidFeedback(null);
+                          }}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                          placeholder="/dev/ttyS1"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Informe o caminho da porta (ex.: /dev/ttyUSB0 ou COM3).
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Baud rate
+                        </label>
+                        <input
+                          type="number"
+                          value={settings.rfid.baudRate || 115200}
+                          onChange={e => {
+                            const value = Number(e.target.value);
+                            setSettings(s => ({
+                              ...s,
+                              rfid: { ...s.rfid, baudRate: value }
+                            }));
+                            setRfidFeedback(null);
+                          }}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          step={100}
+                          min={1200}
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Velocidade padrão de leitores seriais é 115200 bps.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => detectDevices('rfid')}
+                      variant="primary"
+                      size="sm"
+                      disabled={detecting}
+                    >
+                      {detecting ? 'Detectando portas...' : 'Detectar portas seriais'}
+                    </Button>
+                    <p className="text-sm text-gray-500">
+                      O navegador pode solicitar permissão para acessar portas seriais na primeira vez.
+                    </p>
+                  </div>
+
+                  {statusMsg.rfid && (
+                    <div className="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700">
+                      {statusMsg.rfid}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(tab === 'printer' || tab === 'network') && (
             <div className="bg-white rounded-xl shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 {tab === 'printer' && <Printer className="w-6 h-6 text-orange-600" />}
-                {tab === 'rfid' && <Radio className="w-6 h-6 text-green-600" />}
                 {tab === 'network' && <Wifi className="w-6 h-6 text-cyan-600" />}
                 <h2 className="text-2xl font-bold text-gray-800">
                   {tab === 'printer' && 'Impressora'}
-                  {tab === 'rfid' && 'Leitor RFID'}
                   {tab === 'network' && 'Rede Local'}
                 </h2>
               </div>
@@ -837,6 +1289,86 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           )}
         </div>
       </div>
+
+      {rfidModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">Selecionar leitor RFID</h3>
+                <p className="text-sm text-gray-600">
+                  Escolha o modelo instalado neste totem para liberar os campos de configuração corretos.
+                </p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => setRfidModalOpen(false)}>
+                Fechar
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                {
+                  id: 'generic-serial',
+                  title: 'Leitor Serial / USB',
+                  description: 'Antenas conectadas diretamente via cabo serial ou adaptador USB.',
+                  details: 'Necessário informar porta (COM/tty) e baud rate.'
+                },
+                {
+                  id: 'chainway-ur4',
+                  title: 'Chainway UR4',
+                  description: 'Leitor fixo Ethernet com até quatro antenas externas.',
+                  details: 'Requer IP, porta e potência configurados.'
+                }
+              ].map(option => {
+                const active = settings.rfid.readerModel === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => {
+                      setSettings(s => {
+                        const readerModel = option.id as 'generic-serial' | 'chainway-ur4';
+                        return {
+                          ...s,
+                          rfid: {
+                            ...s.rfid,
+                            readerModel,
+                            access: readerModel === 'generic-serial' ? 'serial' : 'tcpip',
+                            host:
+                              readerModel === 'chainway-ur4' ? s.rfid.chainwayUr4.host : s.rfid.host,
+                            tcpPort:
+                              readerModel === 'chainway-ur4' ? s.rfid.chainwayUr4.port : s.rfid.tcpPort,
+                            port: readerModel === 'generic-serial' ? s.rfid.port ?? '/dev/ttyS1' : undefined
+                          }
+                        };
+                      });
+                      setStatus(s => ({ ...s, rfid: 'idle' }));
+                      setStatusMsg(s => ({ ...s, rfid: '' }));
+                      setRfidFeedback(null);
+                      setRfidModalOpen(false);
+                    }}
+                    className={`text-left border-2 rounded-2xl p-5 transition-all ${
+                      active
+                        ? 'border-green-500 bg-green-50 shadow-lg'
+                        : 'border-gray-200 bg-white hover:border-green-300 hover:shadow'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xl font-semibold text-gray-800">{option.title}</h4>
+                      {active && (
+                        <span className="px-3 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full">
+                          Selecionado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">{option.description}</p>
+                    <p className="text-xs text-gray-500">{option.details}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

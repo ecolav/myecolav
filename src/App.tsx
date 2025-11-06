@@ -3,9 +3,8 @@ import { useNavigation } from './hooks/useNavigation';
 import { DashboardScreen } from './components/screens/DashboardScreen';
 import { WeighingScreen } from './components/screens/WeighingScreen';
 import { DistributionAndOrdersScreen } from './components/screens/DistributionAndOrdersScreen';
-import { RFIDScreen } from './components/screens/RFIDScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
-import { SpecialRollsScreen } from './components/screens/SpecialRollsScreen';
+import { RfidOperationsScreen } from './components/screens/RfidOperationsScreen';
 import { User } from './types';
 
 function App() {
@@ -37,11 +36,8 @@ function App() {
       case 'distribution-orders':
         return <DistributionAndOrdersScreen onBack={goBack} />;
       
-      case 'rfid':
-        return <RFIDScreen onBack={goBack} />;
-      
-      case 'specialrolls':
-        return <SpecialRollsScreen onBack={goBack} />;
+      case 'rfid-operations':
+        return <RfidOperationsScreen onBack={goBack} />;
       
       case 'reports':
         return (

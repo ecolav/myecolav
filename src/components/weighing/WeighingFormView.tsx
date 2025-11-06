@@ -47,6 +47,8 @@ export interface WeighingFormViewProps {
   targetKg?: number;
   progressPercent?: number;
   onCageSelected?: (id: string) => void;
+  onDeleteEntry?: (entryId: string) => void;
+  isSubmitting?: boolean; // Flag para desabilitar botão durante envio
   [key: string]: any;
 }
 
@@ -77,7 +79,9 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
   clothingType,
   targetKg = 0,
   progressPercent = 0,
-  onCageSelected
+  onCageSelected,
+  onDeleteEntry,
+  isSubmitting = false
 }) => {
   const totalNet = entries.reduce((sum, e) => sum + e.net, 0); // Peso líquido (sem tara)
   const totalPieces = entries.reduce((sum, e) => sum + e.pieceCount, 0);
@@ -85,11 +89,12 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
   const [cageOpen, setCageOpen] = useState(false);
   const isDev = (import.meta as any)?.env?.DEV ?? false;
   const hasRfid = Object.keys(rfidCounts).length > 0;
+
   return (
     <main className="p-2">
       {step === 'weighing' && (
         <div className="space-y-2">
-          {/* Barra 1: Campos otimizados para touch 15" */}
+          {/* Barra 1: informações principais e status */}
           <div className="flex items-center justify-between gap-2 bg-white border border-gray-200 rounded-md px-3 py-2 shadow-sm">
             <div className="flex items-center gap-2">
               <span className="text-base font-bold tracking-wide text-gray-700">PESO</span>
@@ -115,6 +120,24 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
                 placeholder="Tara"
                 className="w-24 min-h-[48px] px-2 border border-gray-300 rounded text-base cursor-pointer"
               />
+              <Button
+                size="sm"
+                variant="secondary"
+                className="min-h-[48px]"
+                onClick={() => {
+                  onCageTareChange(0);
+                  onCageBarcodeChange('');
+                  if (onCageSelected) onCageSelected('');
+                }}
+                disabled={cageTare <= 0 && !cageBarcode}
+              >
+                Limpar tara
+              </Button>
+              {/* Contador de pesagens */}
+              <div className="ml-4 px-4 py-2 bg-blue-100 border-2 border-blue-400 rounded-lg">
+                <div className="text-xs text-blue-700 font-semibold">PESAGENS</div>
+                <div className="text-2xl font-bold text-blue-900">{entries.length}</div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {!connected && (
@@ -161,21 +184,33 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
               )}
             </div>
 
-            {/* Direita: tabela de entradas (gaiolas) - SIMPLIFICADA */}
+            {/* Direita: tabela de entradas (gaiolas) com botão excluir */}
             <div className="border border-gray-200 bg-white rounded-md overflow-hidden shadow-sm">
-              <div className="grid grid-cols-4 text-base bg-gray-100 border-b border-gray-200">
+              <div className="grid grid-cols-5 text-base bg-gray-100 border-b border-gray-200">
                 <div className="px-2 py-2 font-bold text-gray-800">Gaiola</div>
                 <div className="px-2 py-2 font-bold text-gray-800">Kg</div>
                 <div className="px-2 py-2 font-bold text-gray-800">Peças</div>
                 <div className="px-2 py-2 font-bold text-gray-800">Hora</div>
+                <div className="px-2 py-2 font-bold text-gray-800 text-center">Ação</div>
               </div>
               <div className="h-48 overflow-auto">
                 {entries.map((e) => (
-                  <div key={e.id} className="grid grid-cols-4 text-base border-b border-gray-200 hover:bg-blue-50">
+                  <div key={e.id} className="grid grid-cols-5 text-base border-b border-gray-200 hover:bg-blue-50">
                     <div className="px-2 py-3 truncate font-medium text-gray-900">{e.cageCode}</div>
                     <div className="px-2 py-3 font-bold text-blue-700">{e.net.toFixed(2)}</div>
                     <div className="px-2 py-3 font-bold text-gray-900">{e.pieceCount}</div>
                     <div className="px-2 py-3 text-gray-600">{e.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div className="px-2 py-3 flex justify-center">
+                      {onDeleteEntry && (
+                        <button
+                          onClick={() => onDeleteEntry(e.id)}
+                          className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded min-h-[36px] min-w-[36px] active:scale-95 transition-transform"
+                          title="Excluir pesagem"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -196,7 +231,10 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
               <div className="text-xs text-gray-600 mb-1">PEÇAS</div>
               <div className="text-2xl font-bold text-gray-900">{totalPieces}</div>
               {clothingType === 'limpa' && targetKg > 0 && (
-                <div className="text-xs text-gray-600 mt-1">{Math.round(progressPercent)}% de {targetKg} kg</div>
+                <>
+                  <div className="text-xs text-gray-600 mt-1">Meta: {targetKg.toFixed(0)} kg (suja ontem)</div>
+                  <div className="text-xs text-green-700 font-bold">{Math.round(progressPercent)}% entregue</div>
+                </>
               )}
             </div>
             <div className="col-span-1 flex flex-col gap-2">
@@ -204,7 +242,9 @@ export const WeighingFormView: React.FC<WeighingFormViewProps> = ({
                 <Button onClick={onSimulateRfid} disabled={isRfidReading} variant="secondary" size="lg" fullWidth>RFID</Button>
               )}
               <Button onClick={onCaptureWeighing} disabled={weight <= 0 || (!isStable)} variant="success" size="lg" fullWidth>PESAR</Button>
-              <Button onClick={onFinalize} disabled={entries.length === 0} variant="primary" size="lg" fullWidth>FINALIZAR</Button>
+              <Button onClick={onFinalize} disabled={entries.length === 0 || isSubmitting} variant="primary" size="lg" fullWidth>
+                {isSubmitting ? 'ENVIANDO...' : 'FINALIZAR'}
+              </Button>
             </div>
           </div>
         </div>

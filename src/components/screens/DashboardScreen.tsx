@@ -35,6 +35,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const { settings } = useSettings();
   const { selectedClient } = useClients();
   const [isOnline] = React.useState(true);
+  const isClean = settings.totem.type === 'clean';
 
   // Filtrar tiles baseado no tipo de totem
   const getAvailableTiles = () => {
@@ -58,12 +59,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         stats: 'Gestão unificada'
       },
       {
-        id: 'specialrolls',
-        title: 'Rolos Especiais',
+        id: 'rfid-operations',
+        title: isClean ? 'Associação RFID' : 'Expurgo RFID',
         icon: Activity,
-        gradient: 'from-indigo-500 to-indigo-700',
-        description: 'Cadastro e rastreamento de rolos',
-        stats: 'Registro rápido'
+        gradient: isClean ? 'from-emerald-500 to-emerald-700' : 'from-orange-500 to-orange-700',
+        description: isClean
+          ? 'Associar tags RFID às peças cadastradas'
+          : 'Registrar entradas de peças no expurgo',
+        stats: isClean ? 'Lotes pendentes' : 'Leitura contínua'
       },
       {
         id: 'settings',
@@ -77,14 +80,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     // Filtrar tiles baseado no tipo de totem
     if (settings.totem.type === 'dirty') {
-      // Totem de área suja - apenas pesagem, rolos especiais e configurações
+      // Totem de área suja - foco em pesagem/coleta RFID e configurações
       return allTiles.filter(tile => 
-        ['weighing', 'specialrolls', 'settings'].includes(tile.id)
+        ['weighing', 'rfid-operations', 'settings'].includes(tile.id)
       );
     } else {
-      // Totem de área limpa - pesagem, distribuição & pedidos, rolos especiais e configurações
+      // Totem de área limpa - pesagem, distribuição & pedidos, associação RFID e configurações
       return allTiles.filter(tile => 
-        ['weighing', 'distribution-orders', 'specialrolls', 'settings'].includes(tile.id)
+        ['weighing', 'distribution-orders', 'rfid-operations', 'settings'].includes(tile.id)
       );
     }
   };

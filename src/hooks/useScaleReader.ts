@@ -320,27 +320,62 @@ export function useScaleReader(config: ScaleConfig = { mode: 'mock' }): UseScale
   const submitWeighing = async (controlId: string, options?: { cageId?: string; tareWeight?: number; totalWeight?: number }): Promise<boolean> => {
     if (!config.apiBaseUrl) return false;
     
-    setLoading(true);
+    // ❌ REMOVIDO: setLoading(true) pode interferir com o loop de múltiplas pesagens
+    // setLoading(true);
     setError(null);
     try {
       const body: any = { control_id: controlId, peso_total: options?.totalWeight ?? weight };
-      if (options?.cageId) body.cage_id = options.cageId;
-      else if (options?.tareWeight !== undefined) body.peso_tara = options.tareWeight;
-      const res = await fetch(`${config.apiBaseUrl}${API_CONFIG.ENDPOINTS.TOTEM.WEIGHINGS}`, {
+      
+      // ✅ CORRIGIDO: Envia cageId se disponível
+      if (options?.cageId) {
+        body.cage_id = options.cageId;
+      }
+      
+      // ✅ CORRIGIDO: Envia tara sempre que disponível (não é exclusivo com cageId)
+      if (options?.tareWeight !== undefined) {
+        body.peso_tara = options.tareWeight;
+      }
+      
+      const url = `${config.apiBaseUrl}${API_CONFIG.ENDPOINTS.TOTEM.WEIGHINGS}`;
+      
+      console.log('🌐 ENVIANDO PARA API:');
+      console.log('URL:', url);
+      console.log('Body:', JSON.stringify(body, null, 2));
+      
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': API_CONFIG.API_KEY },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-api-key': API_CONFIG.API_KEY,
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(body)
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
       
-      setWeight(0);
-      setIsStable(false);
+      console.log('📥 Resposta:', res.status, res.statusText);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ Erro da API:', errorText);
+        // ❌ Não tratar duplicidade como sucesso; deixar o caller decidir (pode re-tentar)
+        throw new Error('HTTP ' + res.status + (errorText ? (': ' + errorText) : ''));
+      }
+      
+      const responseData = await res.json();
+      console.log('✅ Resposta OK:', responseData);
+      
+      // ❌ REMOVIDO: setWeight(0) e setIsStable(false) 
+      // Isso estava interferindo com o envio de múltiplas pesagens
+      // setWeight(0);
+      // setIsStable(false);
       return true;
     } catch (err) {
+      console.error('❌ Erro no submitWeighing:', err);
       setError('Erro ao enviar pesagem');
       return false;
     } finally {
-      setLoading(false);
+      // ❌ REMOVIDO: setLoading(false) pode interferir com o loop de múltiplas pesagens
+      // setLoading(false);
     }
   };
 
