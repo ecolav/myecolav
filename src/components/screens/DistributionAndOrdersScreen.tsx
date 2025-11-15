@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { useSettings } from '../../hooks/useSettings';
 import { useSectors } from '../../hooks/useSectors';
 import { useRequests } from '../../hooks/useRequests';
+import { useRFIDReader } from '../../hooks/useRFIDReader';
 import { API_CONFIG } from '../../config/api';
 
 interface Props {
@@ -32,6 +33,15 @@ type DistributionView = 'modeSelection' | 'sectorSelection';
 export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const { settings } = useSettings();
   const clientId = selectedClient?.id || settings.totem.clientId;
+  
+  // Hook para leitura real do UR4
+  const {
+    status: rfidStatus,
+    startContinuousReading: startRealRFIDReading,
+    stopContinuousReading: stopRealRFIDReading,
+    connectToReader: connectRFIDReader,
+    readings: rfidReadings
+  } = useRFIDReader();
 
   // Controle principal: alternar entre distribuição e pedidos
   const [mainView, setMainView] = useState<'distribution' | 'orders'>('distribution');
@@ -55,7 +65,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const [rfidScope, setRfidScope] = useState<'bed' | 'sector'>('bed');
   const [rfidSelectedBedId, setRfidSelectedBedId] = useState('');
   const [rfidEntries, setRfidEntries] = useState<
-    Array<{ tag: string; linenItemId: string; name: string; sku?: string }>
+    Array<{ tag: string; tid?: string; linenItemId?: string; name: string; sku?: string; notFound?: boolean }>
   >([]);
   const [rfidFeedback, setRfidFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rfidSubmitting, setRfidSubmitting] = useState(false);
@@ -63,9 +73,13 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const [rfidLookupLoading, setRfidLookupLoading] = useState(false);
   const [rfidReadingActive, setRfidReadingActive] = useState(false);
   const [rfidBedPage, setRfidBedPage] = useState(0);
+  const [rfidEntriesPage, setRfidEntriesPage] = useState(0);
   const hiddenRfidInputRef = useRef<HTMLInputElement>(null);
+  const processedTagsRef = useRef<Set<string>>(new Set());
+  const lastProcessedReadingIdRef = useRef<number>(0);
 
   const BED_PAGE_SIZE = 4;
+  const RFID_ENTRIES_PAGE_SIZE = 8;
 
   // Dados
   const { sectors, loading: loadingSectors } = useSectors({ clientId, autoLoad: true });
@@ -184,15 +198,32 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     setShowRfidModal(true);
   };
 
-  const startRfidReading = () => {
+  const startRfidReading = async () => {
     setRfidReadingActive(true);
     setRfidFeedback(null);
     setRfidDraft('');
-    focusHiddenRfidInput();
+    
+    // Conectar e iniciar leitura real do UR4
+    try {
+      if (!rfidStatus.isConnected) {
+        await connectRFIDReader();
+      }
+      startRealRFIDReading();
+      // Também manter input escondido para compatibilidade com emulação de teclado
+      focusHiddenRfidInput();
+    } catch (error) {
+      console.error('Erro ao iniciar leitura RFID:', error);
+      setRfidFeedback({ 
+        type: 'error', 
+        message: 'Erro ao conectar ao leitor RFID. Verifique se o servidor está rodando.' 
+      });
+      setRfidReadingActive(false);
+    }
   };
 
   const stopRfidReading = () => {
     setRfidReadingActive(false);
+    stopRealRFIDReading();
     hiddenRfidInputRef.current?.blur();
   };
 
@@ -203,6 +234,98 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showRfidModal]);
+
+  // Processar tags recebidas via Socket.IO do UR4 - PROCESSAR TODAS AS NOVAS LEITURAS
+  useEffect(() => {
+    if (!rfidReadingActive || !rfidReadings.length) return;
+    
+    // Processar TODAS as leituras novas (não apenas a última)
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedReadingIdRef.current);
+    
+    if (newReadings.length === 0) return;
+    
+    console.log(`📡 [RFID] Processando ${newReadings.length} nova(s) leitura(s) de ${rfidReadings.length} total`);
+    
+    // Processar todas as tags de uma vez para evitar problemas de batch do React
+    const tagsToAdd: Array<{ tag: string; tid?: string; epc?: string; readingId: number }> = [];
+    
+    newReadings.forEach(reading => {
+      // Normalizar TID e EPC
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      
+      // Priorizar TID por ser único por peça; usar EPC apenas como fallback
+      const tag = tid || epc;
+      
+      if (tag && !processedTagsRef.current.has(tag)) {
+        console.log('📡 [RFID] Nova tag detectada:', {
+          id: reading.id,
+          tag,
+          tid: reading.tid,
+          epc: reading.epc,
+          normalizedTid: tid,
+          normalizedEpc: epc,
+          antenna: reading.antenna,
+          using: tid ? 'TID' : 'EPC'
+        });
+        processedTagsRef.current.add(tag);
+        
+        tagsToAdd.push({
+          tag,
+          tid: tid || undefined,
+          epc: epc || undefined,
+          readingId: reading.id
+        });
+        
+        // Limpar tag processada após 5 segundos para permitir reprocessamento se necessário
+        setTimeout(() => {
+          processedTagsRef.current.delete(tag);
+        }, 5000);
+      }
+    });
+    
+    // Adicionar todas as tags de uma vez
+    if (tagsToAdd.length > 0) {
+      console.log(`✅ [RFID] Adicionando ${tagsToAdd.length} tag(s) ao estado`);
+      
+      setRfidEntries(prev => {
+        const existingTags = new Set(prev.map(e => e.tag));
+        const newEntries = tagsToAdd
+          .filter(t => !existingTags.has(t.tag))
+          .map(t => ({
+            tag: t.tag,
+            tid: t.tid,
+            name: 'Não cadastrada',
+            notFound: true
+          }));
+        
+        if (newEntries.length > 0) {
+          console.log(`✅ [RFID] ${newEntries.length} tag(s) nova(s) adicionada(s) ao estado`);
+          return [...prev, ...newEntries];
+        }
+        return prev;
+      });
+      
+      // Buscar na API em background para cada tag (sem bloquear)
+      tagsToAdd.forEach(({ tag, tid, epc }) => {
+        lookupRfidTag(tag, { tid, epc });
+      });
+    }
+    
+    // Atualizar último ID processado
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedReadingIdRef.current = maxId;
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rfidReadings, rfidReadingActive]);
+
+  // Limpar tags processadas ao fechar modal ou parar leitura
+  useEffect(() => {
+    if (!rfidReadingActive) {
+      processedTagsRef.current.clear();
+      lastProcessedReadingIdRef.current = 0;
+    }
+  }, [rfidReadingActive]);
 
   const handleSectorSelection = (sectorId: string) => {
     if (!selectedMode) return;
@@ -288,6 +411,23 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     const start = rfidBedPage * BED_PAGE_SIZE;
     return rfidBedsForSector.slice(start, start + BED_PAGE_SIZE);
   }, [rfidBedsForSector, rfidBedPage]);
+
+  const rfidEntriesTotalPages = Math.max(
+    1,
+    Math.ceil(rfidEntries.length / RFID_ENTRIES_PAGE_SIZE)
+  );
+
+  const rfidEntriesPageItems = useMemo(() => {
+    if (rfidEntries.length === 0) return [];
+    const start = rfidEntriesPage * RFID_ENTRIES_PAGE_SIZE;
+    return rfidEntries.slice(start, start + RFID_ENTRIES_PAGE_SIZE);
+  }, [rfidEntries, rfidEntriesPage]);
+
+  useEffect(() => {
+    if (rfidEntriesPage > rfidEntriesTotalPages - 1) {
+      setRfidEntriesPage(Math.max(rfidEntriesTotalPages - 1, 0));
+    }
+  }, [rfidEntriesTotalPages, rfidEntriesPage]);
 
   const handleManualQuantityChange = (itemId: string, delta: number) => {
     // Comentário: ajusta quantidade respeitando estoque atual do item.
@@ -383,21 +523,34 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     }
   };
 
+  // Contar tags não cadastradas
+  const rfidNotFoundCount = useMemo(() => {
+    return rfidEntries.filter(entry => entry.notFound || !entry.linenItemId).length;
+  }, [rfidEntries]);
+  
+  // Contar tags cadastradas
+  const rfidFoundCount = useMemo(() => {
+    return rfidEntries.filter(entry => entry.linenItemId && !entry.notFound).length;
+  }, [rfidEntries]);
+  
   const rfidSummary = useMemo(() => {
     const map = new Map<
       string,
       { linenItemId: string; quantity: number; name: string; sku?: string }
     >();
-    rfidEntries.forEach(entry => {
-      const catalogItem = items.find(i => i.id === entry.linenItemId);
-      const current = map.get(entry.linenItemId);
-      map.set(entry.linenItemId, {
-        linenItemId: entry.linenItemId,
-        quantity: (current?.quantity || 0) + 1,
-        name: entry.name || catalogItem?.name || 'Item RFID',
-        sku: entry.sku || catalogItem?.sku
+    // Filtrar apenas tags cadastradas (que têm linenItemId)
+    rfidEntries
+      .filter(entry => entry.linenItemId && !entry.notFound)
+      .forEach(entry => {
+        const catalogItem = items.find(i => i.id === entry.linenItemId);
+        const current = map.get(entry.linenItemId!);
+        map.set(entry.linenItemId!, {
+          linenItemId: entry.linenItemId!,
+          quantity: (current?.quantity || 0) + 1,
+          name: entry.name || catalogItem?.name || 'Item RFID',
+          sku: entry.sku || catalogItem?.sku
+        });
       });
-    });
     return Array.from(map.values());
   }, [rfidEntries, items]);
 
@@ -412,8 +565,18 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   );
 
   const handleRfidDistribution = async () => {
-    if (!selectedSectorId || rfidEntries.length === 0) {
-      setRfidFeedback({ type: 'error', message: 'Nenhuma peça RFID informada.' });
+    // Filtrar apenas tags cadastradas para distribuição
+    const validEntries = rfidEntries.filter(entry => entry.linenItemId && !entry.notFound);
+    
+    if (!selectedSectorId || validEntries.length === 0) {
+      if (rfidNotFoundCount > 0) {
+        setRfidFeedback({ 
+          type: 'error', 
+          message: `Nenhuma peça cadastrada para distribuir. ${rfidNotFoundCount} tag(s) não cadastrada(s) foram ignoradas.` 
+        });
+      } else {
+        setRfidFeedback({ type: 'error', message: 'Nenhuma peça RFID informada.' });
+      }
       return;
     }
 
@@ -442,6 +605,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
         rfidScope === 'sector' ? 'Sem leito (Setor)' : getBedName(targetBedId);
       const reason = `Distribuição RFID para ${sectorName} - ${bedName}`;
 
+      // Usar apenas tags cadastradas (rfidSummary já filtra)
       for (const summary of rfidSummary) {
         const response = await fetch(
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.DISTRIBUTE}`,
@@ -492,7 +656,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     setRfidEntries(prev => prev.filter(entry => entry.tag !== tag));
   };
 
-  const addRfidEntry = (entry: { tag: string; linenItemId: string; name: string; sku?: string }) => {
+  const addRfidEntry = (entry: { tag: string; tid?: string; linenItemId?: string; name: string; sku?: string; notFound?: boolean }) => {
     setRfidEntries(prev => {
       if (prev.some(existing => existing.tag === entry.tag)) {
         return prev;
@@ -501,75 +665,130 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     });
   };
 
-  const lookupRfidTag = async (rawTag: string) => {
-    const tag = rawTag.trim();
+  const lookupRfidTag = async (rawTag: string, options?: { tid?: string | null; epc?: string | null }) => {
+    // Normalizar tag: remover espaços, converter para maiúsculas, remover caracteres especiais
+    const tag = rawTag.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '');
     if (!tag || !rfidReadingActive) return;
-    if (rfidEntries.some(entry => entry.tag === tag)) {
-      setRfidFeedback({ type: 'error', message: `A peça ${tag} já foi registrada.` });
-      return;
-    }
+    
+    // Não mostrar feedback de loading para não interromper o fluxo
     setRfidLookupLoading(true);
-    setRfidFeedback(null);
-    try {
-      const url = new URL(
-        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_LOOKUP}`
-      );
-      url.searchParams.set('tag', tag);
-      const response = await fetch(url.toString(), {
-        headers: { 'x-api-key': API_CONFIG.API_KEY }
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Tag não encontrada.');
+    
+    // Tentar primeiro com a tag fornecida, depois tentar alternativas se falhar
+    const tagsToTry = [tag];
+    if (options?.epc && options.epc !== tag) tagsToTry.push(options.epc);
+    if (options?.tid && options.tid !== tag && options.tid !== options?.epc) tagsToTry.push(options.tid);
+    
+    for (const tagToTry of tagsToTry) {
+      try {
+        const url = new URL(
+          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_LOOKUP}`
+        );
+        url.searchParams.set('tag', tagToTry);
+        
+        console.log('🔍 [RFID] Buscando tag na API:', {
+          tag: tagToTry,
+          url: url.toString(),
+          originalTag: rawTag,
+          attempt: tagsToTry.indexOf(tagToTry) + 1,
+          totalAttempts: tagsToTry.length
+        });
+        
+        const response = await fetch(url.toString(), {
+          headers: { 'x-api-key': API_CONFIG.API_KEY }
+        });
+        
+        console.log('📡 [RFID] Resposta da API:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          tag: tagToTry
+        });
+        
+        if (!response.ok) {
+          const text = await response.text();
+          console.warn('⚠️ [RFID] Tag não encontrada, tentando próxima:', {
+            tag: tagToTry,
+            status: response.status,
+            text,
+            hasMoreAttempts: tagsToTry.indexOf(tagToTry) < tagsToTry.length - 1
+          });
+          
+          // Se não for a última tentativa, continuar loop
+          if (tagsToTry.indexOf(tagToTry) < tagsToTry.length - 1) {
+            continue;
+          }
+          
+          // Se for a última tentativa, lançar erro
+          throw new Error(text || `Tag ${tagToTry} não encontrada na base de dados.`);
+        }
+        
+        // Se chegou aqui, encontrou a tag - processar resposta
+        const data = await response.json();
+        
+        console.log('✅ [RFID] Dados recebidos da API:', {
+          data,
+          tagUsed: tagToTry
+        });
+        
+        const linenItemId =
+          data?.linenItemId ||
+          data?.linenItem?.id ||
+          data?.rfidItem?.linenItemId ||
+          data?.item?.linenItemId ||
+          data?.itemId ||
+          null;
+
+        if (!linenItemId) {
+          console.error('❌ [RFID] Resposta da API não contém linenItemId:', data);
+          throw new Error('Resposta da API não contém o código do item.');
+        }
+
+        const catalogItem = items.find(i => i.id === linenItemId);
+        const name =
+          data?.linenItemName ||
+          data?.linenItem?.name ||
+          data?.item?.name ||
+          catalogItem?.name ||
+          'Item RFID';
+        const sku =
+          data?.linenItemSku ||
+          data?.linenItem?.sku ||
+          data?.item?.sku ||
+          catalogItem?.sku;
+
+        // Atualizar entrada existente (a tag já foi adicionada como "não cadastrada")
+        setRfidEntries(prev => prev.map(entry => 
+          entry.tag === tag 
+            ? { tag, tid: entry.tid, linenItemId, name, sku, notFound: false }
+            : entry
+        ));
+        
+        // Sucesso - sair do loop
+        break;
+      } catch (error) {
+        // Se for a última tentativa, manter como "não cadastrada" (já foi adicionada)
+        if (tagsToTry.indexOf(tagToTry) === tagsToTry.length - 1) {
+          console.log('⚠️ [RFID] Tag não encontrada, mantendo como não cadastrada:', tag);
+          // Tag já foi adicionada como "não cadastrada" no useEffect
+          // Não precisa fazer nada aqui
+        }
+        // Caso contrário, continuar tentando outras tags
       }
-      const data = await response.json();
-
-      const linenItemId =
-        data?.linenItemId ||
-        data?.linenItem?.id ||
-        data?.rfidItem?.linenItemId ||
-        data?.item?.linenItemId ||
-        data?.itemId ||
-        null;
-
-      if (!linenItemId) {
-        throw new Error('Resposta da API não contém o código do item.');
-      }
-
-      const catalogItem = items.find(i => i.id === linenItemId);
-      const name =
-        data?.linenItemName ||
-        data?.linenItem?.name ||
-        data?.item?.name ||
-        catalogItem?.name ||
-        'Item RFID';
-      const sku =
-        data?.linenItemSku ||
-        data?.linenItem?.sku ||
-        data?.item?.sku ||
-        catalogItem?.sku;
-
-      addRfidEntry({ tag, linenItemId, name, sku });
-      setRfidFeedback({
-        type: 'success',
-        message: `Peça ${tag} reconhecida como ${name}.`
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao consultar a peça.';
-      setRfidFeedback({ type: 'error', message });
-    } finally {
-      setRfidLookupLoading(false);
-      setRfidDraft('');
-      focusHiddenRfidInput();
     }
+    
+    setRfidLookupLoading(false);
+    setRfidDraft('');
+    focusHiddenRfidInput();
   };
 
   const handleRfidKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (!rfidReadingActive) return;
     if (event.key === 'Enter') {
       event.preventDefault();
-      const tag = rfidDraft.trim();
+      const value = event.currentTarget.value;
+      event.currentTarget.value = '';
       setRfidDraft('');
+      const tag = value.trim();
       if (tag) lookupRfidTag(tag);
     } else if (event.key === 'Escape') {
       setRfidDraft('');
@@ -1149,47 +1368,122 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
                     </h3>
                     {rfidEntries.length === 0 ? (
                       <p className="text-sm text-gray-500">
-                        Nenhuma peça lida até o momento. Clique em “Iniciar leitura” e passe as peças pelo leitor RFID.
+                        Nenhuma peça lida até o momento. Clique em "Iniciar leitura" e passe as peças pelo leitor RFID.
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {rfidEntries.map(entry => {
-                          return (
-                            <div
-                              key={entry.tag}
-                              className="border border-gray-200 rounded-lg p-3 flex justify-between items-center"
-                            >
-                              <div>
-                                <p className="text-sm font-semibold text-gray-800">{entry.name}</p>
-                                <p className="text-xs text-gray-500 font-mono">{entry.tag}</p>
-                              </div>
-                              <button
-                                onClick={() => removeRfidEntry(entry.tag)}
-                                className="text-xs text-red-600 hover:text-red-800"
+                      <>
+                        <div className="space-y-3">
+                          <div className="max-h-[420px] overflow-y-auto pr-1">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                              {rfidEntriesPageItems.map(entry => {
+                            const isNotFound = entry.notFound || !entry.linenItemId;
+                            const displayTid = entry.tid || entry.tag; // Mostrar TID se disponível, senão mostra a tag
+                            return (
+                              <div
+                                key={entry.tag}
+                                className={`border rounded-lg p-3 flex justify-between items-center ${
+                                  isNotFound 
+                                    ? 'border-orange-300 bg-orange-50' 
+                                    : 'border-gray-200'
+                                }`}
                               >
-                                remover
-                              </button>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className={`text-sm font-semibold font-mono ${
+                                      isNotFound ? 'text-orange-800' : 'text-gray-800'
+                                    }`}>
+                                      {displayTid}
+                                    </p>
+                                    {isNotFound && (
+                                      <span className="text-xs text-orange-600 font-medium">
+                                        Não cadastrada
+                                      </span>
+                                    )}
+                                  </div>
+                                  {!isNotFound && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {entry.name}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => removeRfidEntry(entry.tag)}
+                                  className="text-xs text-red-600 hover:text-red-800 ml-2"
+                                >
+                                  remover
+                                </button>
+                              </div>
+                            );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                          {rfidEntries.length > RFID_ENTRIES_PAGE_SIZE && (
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600">
+                              <span className="font-medium text-gray-700">
+                                Página {rfidEntriesPage + 1} de {rfidEntriesTotalPages}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  className="px-4 py-2 rounded-xl border border-gray-300 bg-white text-base font-semibold disabled:opacity-40"
+                                  onClick={() => setRfidEntriesPage(page => Math.max(page - 1, 0))}
+                                  disabled={rfidEntriesPage === 0}
+                                >
+                                  ◀ Anterior
+                                </button>
+                                <button
+                                  className="px-4 py-2 rounded-xl border border-gray-300 bg-white text-base font-semibold disabled:opacity-40"
+                                  onClick={() =>
+                                    setRfidEntriesPage(page =>
+                                      page < rfidEntriesTotalPages - 1 ? page + 1 : page
+                                    )
+                                  }
+                                  disabled={rfidEntriesPage >= rfidEntriesTotalPages - 1}
+                                >
+                                  Próxima ▶
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="pt-2 border-t border-gray-200">
+                          <p className="text-sm font-semibold text-gray-800 text-center">
+                            Total: {rfidTotalPieces} tag(s) lida(s)
+                          </p>
+                        </div>
+                      </>
                     )}
                   </div>
 
                   <div className="rounded-xl border border-gray-200 p-4 space-y-2 min-h-[180px]">
-                    <h4 className="text-sm font-semibold text-gray-800">Resumo por item</h4>
-                    {rfidSummary.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        Adicione peças para visualizar o resumo.
-                      </p>
+                    <h4 className="text-sm font-semibold text-gray-800">Resumo</h4>
+                    {rfidNotFoundCount > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-lg font-bold text-orange-800">
+                          {rfidNotFoundCount} tag(s) não cadastrada(s)
+                        </p>
+                        {rfidFoundCount > 0 && (
+                          <p className="text-xs text-gray-600">
+                            {rfidFoundCount} tag(s) cadastrada(s) pronta(s) para distribuir.
+                          </p>
+                        )}
+                      </div>
+                    ) : rfidSummary.length > 0 ? (
+                      <>
+                        <p className="text-xs text-gray-600 mb-2">
+                          {rfidFoundCount} tag(s) cadastrada(s) pronta(s) para distribuir:
+                        </p>
+                        <ul className="text-xs text-gray-600 space-y-1">
+                          {rfidSummary.map(row => (
+                            <li key={row.linenItemId}>
+                              {row.name} · {row.quantity} peça(s){row.sku ? ` · SKU ${row.sku}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
                     ) : (
-                      <ul className="text-xs text-gray-600 space-y-1">
-                        {rfidSummary.map(row => (
-                          <li key={row.linenItemId}>
-                            {row.name} · {row.quantity} peça(s){row.sku ? ` · SKU ${row.sku}` : ''}
-                          </li>
-                        ))}
-                      </ul>
+                      <p className="text-xs text-gray-500">
+                        Nenhuma tag lida ainda.
+                      </p>
                     )}
                   </div>
 

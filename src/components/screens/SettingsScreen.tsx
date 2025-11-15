@@ -989,6 +989,20 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                               }
                             }));
                             setRfidFeedback(null);
+                            
+                            // Enviar atualização ao servidor imediatamente
+                            fetch('http://localhost:3001/rfid/ur4/config', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                host: value,
+                                port: settings.rfid.chainwayUr4.port,
+                                power: settings.rfid.chainwayUr4.power,
+                                antennas: settings.rfid.chainwayUr4.antennas
+                              })
+                            }).catch(err => {
+                              console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
+                            });
                           }}
                           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
                           placeholder="192.168.99.201"
@@ -1015,6 +1029,20 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                               }
                             }));
                             setRfidFeedback(null);
+                            
+                            // Enviar atualização ao servidor imediatamente
+                            fetch('http://localhost:3001/rfid/ur4/config', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                host: settings.rfid.chainwayUr4.host,
+                                port: value,
+                                power: settings.rfid.chainwayUr4.power,
+                                antennas: settings.rfid.chainwayUr4.antennas
+                              })
+                            }).catch(err => {
+                              console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
+                            });
                           }}
                           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                           min={1}
@@ -1048,6 +1076,20 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                             }
                           }));
                           setRfidFeedback(null);
+                          
+                          // Enviar atualização ao servidor imediatamente
+                          fetch('http://localhost:3001/rfid/ur4/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              host: settings.rfid.chainwayUr4.host,
+                              port: settings.rfid.chainwayUr4.port,
+                              power: value,
+                              antennas: settings.rfid.chainwayUr4.antennas
+                            })
+                          }).catch(err => {
+                            console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
+                          });
                         }}
                         className="w-full accent-green-600"
                       />
@@ -1077,6 +1119,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                                   const next = current.includes(antenna)
                                     ? current.filter(a => a !== antenna)
                                     : [...current, antenna].sort((a, b) => a - b);
+                                  
+                                  // Enviar atualização ao servidor imediatamente
+                                  fetch('http://localhost:3001/rfid/ur4/config', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      host: s.rfid.chainwayUr4.host,
+                                      port: s.rfid.chainwayUr4.port,
+                                      power: s.rfid.chainwayUr4.power,
+                                      antennas: next
+                                    })
+                                  }).catch(err => {
+                                    console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
+                                  });
+                                  
                                   return {
                                     ...s,
                                     rfid: {

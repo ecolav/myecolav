@@ -15,6 +15,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
+import { useRFIDReader } from '../../hooks/useRFIDReader';
 import { API_CONFIG } from '../../config/api';
 
 interface RfidOperationsScreenProps {
@@ -23,6 +24,7 @@ interface RfidOperationsScreenProps {
 
 interface PendingBatch {
   batchNumber: string;
+  itemId: string;
   itemName: string;
   sku?: string;
   quantity: number;
@@ -48,6 +50,16 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
   const isCleanMode = settings.totem.type === 'clean';
   const clientId = selectedClient?.id || settings.totem.clientId;
 
+  // Hook para leitor RFID real (UR4)
+  const {
+    readings: rfidReadings,
+    status: rfidStatus,
+    connectToReader,
+    startContinuousReading,
+    stopContinuousReading,
+    disconnectFromReader
+  } = useRFIDReader();
+
   // --------------------------
   // Estado – Associação RFID (modo limpo)
   // --------------------------
@@ -69,11 +81,15 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
   const [expurgoQueue, setExpurgoQueue] = useState<ExpurgoEntry[]>([]);
   const [loadingExpurgo, setLoadingExpurgo] = useState(false);
   const [expurgoError, setExpurgoError] = useState<string | null>(null);
-  const [expurgoTags, setExpurgoTags] = useState<string[]>([]);
+  const [expurgoTags, setExpurgoTags] = useState<Array<{ tag: string; tid?: string }>>([]);
   const [expurgoReading, setExpurgoReading] = useState(false);
   const [expurgoFeedback, setExpurgoFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const hiddenExpurgoInputRef = useRef<HTMLInputElement>(null);
   const expurgoQueueTimer = useRef<NodeJS.Timeout | null>(null);
+  const processedExpurgoTagsRef = useRef<Set<string>>(new Set());
+  const lastProcessedExpurgoReadingIdRef = useRef<number>(0);
+  const processedCleanTagsRef = useRef<Set<string>>(new Set());
+  const lastProcessedCleanReadingIdRef = useRef<number>(0);
 
   // --------------------------
   // Funções auxiliares de fetch
@@ -82,11 +98,19 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
   const fetchPendingBatches = useCallback(async () => {
     // Comentário: carrega lotes com peças ainda sem tags associadas no backend.
     if (!isCleanMode) return;
+
+    const effectiveClientId = clientId?.trim();
+    if (!effectiveClientId) {
+      setPendingBatches([]);
+      setBatchesError('Configure o cliente nas configurações do Totem para listar os lotes.');
+      return;
+    }
+
     setLoadingBatches(true);
     setBatchesError(null);
     try {
       const params = new URLSearchParams();
-      if (clientId) params.append('clientId', clientId);
+      params.append('clientId', effectiveClientId);
       const response = await fetch(
         `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_PENDING_BATCHES}${params.toString() ? `?${params.toString()}` : ''}`,
         {
@@ -109,19 +133,46 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
       const data = await response.json();
       const batches = Array.isArray(data)
         ? data
-        : Array.isArray(data?.pending) ? data.pending : [];
+        : Array.isArray(data?.batches)
+          ? data.batches
+          : Array.isArray(data?.pending)
+            ? data.pending
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
 
-      const mapped: PendingBatch[] = batches.map((batch: any, index: number) => ({
-        batchNumber: String(batch.batchNumber ?? batch.lote ?? index + 1),
-        itemName: batch.itemName ?? batch.item?.name ?? 'Item sem nome',
-        sku: batch.itemSku ?? batch.item?.sku,
-        quantity: Number(batch.quantity ?? batch.expectedQuantity ?? 0),
-        associatedTags: Number(batch.associatedTags ?? batch.currentCount ?? 0),
-        clientName: batch.clientName ?? batch.client?.name,
-        createdAt: batch.createdAt
-      }));
+      const mapped: PendingBatch[] = batches.map((batch: any, index: number) => {
+        const quantity = Number(
+          batch.quantity ??
+          batch.expectedQuantity ??
+          batch.totalPieces ??
+          (batch.pendingPieces ? batch.pendingPieces + (batch.associatedPieces ?? batch.currentCount ?? 0) : undefined) ??
+          0
+        );
+        const associated = Number(
+          batch.associatedTags ??
+          batch.currentCount ??
+          batch.associatedPieces ??
+          0
+        );
 
-      setPendingBatches(mapped.filter(batch => batch.quantity > batch.associatedTags));
+        return {
+          batchNumber: String(batch.batchNumber ?? batch.lote ?? index + 1),
+          itemId: String(batch.itemId ?? batch.item?.id ?? ''),
+          itemName: batch.itemName ?? batch.item?.name ?? 'Item sem nome',
+          sku: batch.itemSku ?? batch.item?.sku,
+          quantity,
+          associatedTags: associated,
+          clientName: batch.clientName ?? batch.client?.name,
+          createdAt: batch.createdAt
+        };
+      });
+
+      setPendingBatches(
+        mapped
+          .filter(batch => batch.quantity > batch.associatedTags)
+          .filter(batch => !!batch.itemId)
+      );
     } catch (error) {
       console.error('Erro ao carregar lotes pendentes:', error);
       setBatchesError('Não foi possível carregar os lotes pendentes.');
@@ -133,11 +184,19 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
   const fetchExpurgoQueue = useCallback(async () => {
     // Comentário: carrega a fila atual de peças que já foram lidas no expurgo.
     if (isCleanMode) return;
+
+    const effectiveClientId = clientId?.trim();
+    if (!effectiveClientId) {
+      setExpurgoQueue([]);
+      setExpurgoError('Configure o cliente nas configurações do Totem para acompanhar o expurgo.');
+      return;
+    }
+
     setLoadingExpurgo(true);
     setExpurgoError(null);
     try {
       const params = new URLSearchParams();
-      if (clientId) params.append('clientId', clientId);
+      params.append('clientId', effectiveClientId);
       const response = await fetch(
         `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.LAUNDRY_EXPURGO_QUEUE}${params.toString() ? `?${params.toString()}` : ''}`,
         {
@@ -158,15 +217,41 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
       }
 
       const data = await response.json();
-      const entries = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-      const mapped: ExpurgoEntry[] = entries.map((entry: any, index: number) => ({
-        id: String(entry.id ?? entry.rfidItemId ?? index),
-        fullNumber: entry.fullNumber ?? entry.rfid ?? entry.tag,
-        itemName: entry.item?.name ?? entry.linenItem?.name ?? entry.linenItemName,
-        createdAt: entry.createdAt ?? entry.allocatedAt,
-        linenItemName: entry.linenItem?.name ?? entry.item?.name,
-        sectorName: entry.bed?.sector?.name ?? entry.sector?.name
-      }));
+      console.log('📊 [Expurgo] Dados recebidos da API da fila:', data);
+      
+      const entries = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+      
+      console.log(`📊 [Expurgo] Processando ${entries.length} entrada(s) da fila`);
+      
+      const mapped: ExpurgoEntry[] = entries.map((entry: any, index: number) => {
+        // Tentar múltiplos campos para encontrar a tag/RFID
+        const tagValue = entry.fullNumber 
+          ?? entry.rfid 
+          ?? entry.tag 
+          ?? entry.rfidTag 
+          ?? entry.rfidNumber
+          ?? entry.tid
+          ?? entry.epc
+          ?? entry.number
+          ?? null;
+        
+        console.log(`📊 [Expurgo] Entrada ${index + 1}:`, {
+          id: entry.id ?? entry.rfidItemId ?? index,
+          tagValue,
+          entry: entry
+        });
+        
+        return {
+          id: String(entry.id ?? entry.rfidItemId ?? entry.rfidItem?.id ?? index),
+          fullNumber: tagValue,
+          itemName: entry.item?.name ?? entry.linenItem?.name ?? entry.linenItemName ?? entry.itemName,
+          createdAt: entry.createdAt ?? entry.allocatedAt ?? entry.registeredAt,
+          linenItemName: entry.linenItem?.name ?? entry.item?.name ?? entry.linenItemName,
+          sectorName: entry.bed?.sector?.name ?? entry.sector?.name ?? entry.sectorName
+        };
+      });
+      
+      console.log(`✅ [Expurgo] ${mapped.length} entrada(s) mapeada(s) para a fila`);
       setExpurgoQueue(mapped);
     } catch (error) {
       console.error('Erro ao carregar fila do expurgo:', error);
@@ -199,13 +284,121 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
 
   useEffect(() => {
     if (readingActive) {
-      hiddenCleanInputRef.current?.focus();
+      if (settings.rfid.readerModel !== 'chainway-ur4') {
+        hiddenCleanInputRef.current?.focus();
+      }
+    } else if (settings.rfid.readerModel === 'chainway-ur4') {
+      processedCleanTagsRef.current.clear();
+      lastProcessedCleanReadingIdRef.current = 0;
     }
-  }, [readingActive, showAssociationModal]);
+  }, [readingActive, showAssociationModal, settings.rfid.readerModel]);
 
   useEffect(() => {
-    if (expurgoReading) {
+    if (expurgoReading && settings.rfid.readerModel !== 'chainway-ur4') {
       hiddenExpurgoInputRef.current?.focus();
+    }
+  }, [expurgoReading, settings.rfid.readerModel]);
+
+  // Processar tags recebidas do leitor real UR4 no modo expurgo - PROCESSAR EM LOTE
+  useEffect(() => {
+    if (!expurgoReading || isCleanMode || settings.rfid.readerModel !== 'chainway-ur4' || !rfidReadings.length) {
+      return;
+    }
+
+    // Processar TODAS as leituras novas (não apenas a última)
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedExpurgoReadingIdRef.current);
+
+    if (newReadings.length === 0) return;
+
+    console.log(`📡 [Expurgo] Processando ${newReadings.length} nova(s) leitura(s) de ${rfidReadings.length} total`);
+
+    // Processar todas as tags de uma vez para evitar problemas de batch do React
+    const tagsToProcess: Array<{ tag: string; readingId: number }> = [];
+
+    newReadings.forEach(reading => {
+      // Normalizar TID e EPC
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+
+      // Priorizar TID (único por peça); usar EPC apenas como fallback
+      const primaryTag = tid || epc;
+      const uniqueKey = primaryTag;
+
+      if (primaryTag && uniqueKey && !processedExpurgoTagsRef.current.has(uniqueKey)) {
+        console.log('📡 [Expurgo] Nova tag detectada:', {
+          id: reading.id,
+          tag: primaryTag,
+          tid: reading.tid,
+          epc: reading.epc,
+          normalizedTid: tid,
+          normalizedEpc: epc,
+          antenna: reading.antenna,
+          using: tid ? 'TID' : 'EPC',
+          uniqueKey
+        });
+        processedExpurgoTagsRef.current.add(uniqueKey);
+
+        tagsToProcess.push({
+          tag: primaryTag,
+          readingId: reading.id
+        });
+
+        // Limpar tag processada após 5 segundos para permitir reprocessamento se necessário
+        setTimeout(() => {
+          processedExpurgoTagsRef.current.delete(uniqueKey);
+        }, 5000);
+      } else if (primaryTag && uniqueKey && processedExpurgoTagsRef.current.has(uniqueKey)) {
+        console.log(`⚠️ [Expurgo] Tag ${uniqueKey} já foi processada, ignorando...`);
+      }
+    });
+
+    // Processar todas as tags em lote
+    if (tagsToProcess.length > 0) {
+      console.log(`✅ [Expurgo] Processando ${tagsToProcess.length} tag(s) em lote`);
+
+      // Adicionar todas as tags ao estado de uma vez (com TID)
+      setExpurgoTags(prev => {
+        const existingTags = new Set(prev.map(e => e.tag));
+        const newEntries = tagsToProcess
+          .filter(t => !existingTags.has(t.tag))
+          .map(({ tag, readingId }) => {
+            // Encontrar a leitura original para obter TID
+            const originalReading = rfidReadings.find(r => r.id === readingId);
+            const tid = originalReading?.tid 
+              ? originalReading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '')
+              : undefined;
+            return { tag, tid };
+          });
+        
+        if (newEntries.length > 0) {
+          console.log(`✅ [Expurgo] ${newEntries.length} tag(s) nova(s) adicionada(s) ao estado`);
+          return [...prev, ...newEntries];
+        }
+        return prev;
+      });
+
+      // Processar cada tag na API (em paralelo, sem bloquear)
+      tagsToProcess.forEach(({ tag, readingId }) => {
+        // Encontrar a leitura original para obter TID e EPC
+        const originalReading = rfidReadings.find(r => r.id === readingId);
+        handleExpurgoTag(tag, {
+          tid: originalReading?.tid || null,
+          epc: originalReading?.epc || null
+        });
+      });
+    }
+
+    // Atualizar último ID processado
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedExpurgoReadingIdRef.current = maxId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rfidReadings, expurgoReading, isCleanMode, settings.rfid.readerModel]);
+
+  // Limpar tags processadas ao parar leitura
+  useEffect(() => {
+    if (!expurgoReading) {
+      processedExpurgoTagsRef.current.clear();
+      lastProcessedExpurgoReadingIdRef.current = 0;
     }
   }, [expurgoReading]);
 
@@ -223,7 +416,12 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     setShowAssociationModal(true);
   };
 
-  const handleTagCapture = (rawValue: string) => {
+  const pendingPieces = useMemo(() => {
+    if (!selectedBatch) return 0;
+    return Math.max((selectedBatch.quantity ?? 0) - (selectedBatch.associatedTags ?? 0), 0);
+  }, [selectedBatch]);
+
+  const handleTagCapture = useCallback((rawValue: string) => {
     const trimmed = rawValue.trim();
     if (!trimmed) return;
 
@@ -235,9 +433,58 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
         setAssociationFeedback({ type: 'info', message: `Tag ${normalized} já capturada.` } as any);
         return prev;
       }
+
+      if (selectedBatch && pendingPieces === 0) {
+        setAssociationFeedback({
+          type: 'error',
+          message: 'Este lote já possui todas as peças associadas. Atualize a lista ou escolha outro lote.'
+        });
+        return prev;
+      }
+
+      if (selectedBatch && pendingPieces > 0 && prev.length >= pendingPieces) {
+        setAssociationFeedback({
+          type: 'error',
+          message: `Limite de ${pendingPieces} tag(s) atingido. Remova alguma tag antes de adicionar outra.`
+        });
+        return prev;
+      }
+
       return [...prev, normalized];
     });
-  };
+  }, [pendingPieces, selectedBatch]);
+
+  const removeScannedTag = useCallback((tag: string) => {
+    setScannedTags(prev => prev.filter(item => item !== tag));
+  }, []);
+
+  // Processar tags recebidas do leitor real UR4 - modo associação
+  useEffect(() => {
+    if (!readingActive || !isCleanMode || settings.rfid.readerModel !== 'chainway-ur4' || !rfidReadings.length) {
+      return;
+    }
+
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedCleanReadingIdRef.current);
+    if (newReadings.length === 0) return;
+
+    newReadings.forEach(reading => {
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const tag = tid || epc;
+
+      if (tag && !processedCleanTagsRef.current.has(tag)) {
+        processedCleanTagsRef.current.add(tag);
+        handleTagCapture(tag);
+
+        setTimeout(() => {
+          processedCleanTagsRef.current.delete(tag);
+        }, 5000);
+      }
+    });
+
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedCleanReadingIdRef.current = maxId;
+  }, [handleTagCapture, isCleanMode, readingActive, rfidReadings, settings.rfid.readerModel]);
 
   const handleCleanKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
@@ -248,16 +495,45 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     }
   };
 
-  const startAssociationReading = () => {
+  const startAssociationReading = useCallback(async () => {
     setAssociationFeedback(null);
-    setReadingActive(true);
-    setTimeout(() => hiddenCleanInputRef.current?.focus(), 50);
-  };
 
-  const stopAssociationReading = () => {
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      try {
+        if (!rfidStatus.isConnected) {
+          await connectToReader();
+        }
+        startContinuousReading();
+        console.log('✅ [Associação] Leitura RFID real iniciada');
+        setReadingActive(true);
+      } catch (error) {
+        console.error('❌ [Associação] Erro ao iniciar leitura RFID:', error);
+        setAssociationFeedback({
+          type: 'error',
+          message: 'Erro ao conectar ao leitor RFID. Verifique as configurações.'
+        });
+      }
+    } else {
+      setReadingActive(true);
+      setTimeout(() => hiddenCleanInputRef.current?.focus(), 50);
+    }
+  }, [connectToReader, rfidStatus.isConnected, settings.rfid.readerModel, startContinuousReading]);
+
+  const stopAssociationReading = useCallback(() => {
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      stopContinuousReading();
+      console.log('🛑 [Associação] Leitura RFID real parada');
+    } else {
+      hiddenCleanInputRef.current?.blur();
+    }
     setReadingActive(false);
-    hiddenCleanInputRef.current?.blur();
-  };
+  }, [settings.rfid.readerModel, stopContinuousReading]);
+
+  useEffect(() => {
+    if (!showAssociationModal && readingActive) {
+      stopAssociationReading();
+    }
+  }, [readingActive, showAssociationModal, stopAssociationReading]);
 
   const handleAssociationSubmit = async () => {
     if (!selectedBatch) return;
@@ -268,6 +544,11 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
 
     setAssociationSubmitting(true);
     setAssociationFeedback(null);
+    if (!selectedBatch.itemId) {
+      setAssociationFeedback({ type: 'error', message: 'Lote sem itemId. Atualize a lista e tente novamente.' });
+      return;
+    }
+
     try {
       const endpoint = API_CONFIG.ENDPOINTS.TOTEM.RFID_ASSOCIATE_BATCH(selectedBatch.batchNumber);
       const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
@@ -278,7 +559,8 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
         },
         body: JSON.stringify({
           tags: scannedTags,
-          clientId
+          clientId,
+          itemId: selectedBatch.itemId
         })
       });
 
@@ -315,58 +597,167 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     };
   }, [scannedTags.length, selectedBatch]);
 
+  const remainingSlots = useMemo(() => {
+    if (!selectedBatch) return 0;
+    return Math.max(pendingPieces - scannedTags.length, 0);
+  }, [pendingPieces, scannedTags.length, selectedBatch]);
+
   // --------------------------
   // Lógica de leitura do expurgo – modo sujo
   // --------------------------
 
-  const startExpurgoReading = () => {
+  const startExpurgoReading = async () => {
     setExpurgoFeedback(null);
     setExpurgoReading(true);
-    setTimeout(() => hiddenExpurgoInputRef.current?.focus(), 50);
+    
+    // Se for leitor UR4, usar leitor real
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      try {
+        // Conectar e iniciar leitura real
+        if (!rfidStatus.isConnected) {
+          await connectToReader();
+        }
+        startContinuousReading();
+        console.log('✅ [Expurgo] Leitura RFID real iniciada');
+      } catch (error) {
+        console.error('❌ [Expurgo] Erro ao iniciar leitura RFID:', error);
+        setExpurgoFeedback({
+          type: 'error',
+          message: 'Erro ao conectar ao leitor RFID. Verifique as configurações.'
+        });
+        setExpurgoReading(false);
+      }
+    } else {
+      // Modo fallback: emulação de teclado
+      setTimeout(() => hiddenExpurgoInputRef.current?.focus(), 50);
+    }
   };
 
   const stopExpurgoReading = () => {
     setExpurgoReading(false);
-    hiddenExpurgoInputRef.current?.blur();
+    
+    // Se for leitor UR4, parar leitura real
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      stopContinuousReading();
+      console.log('🛑 [Expurgo] Leitura RFID real parada');
+    } else {
+      // Modo fallback: emulação de teclado
+      hiddenExpurgoInputRef.current?.blur();
+    }
   };
 
-  const handleExpurgoTag = async (rawValue: string) => {
+  const handleExpurgoTag = async (rawValue: string, options?: { tid?: string | null; epc?: string | null }) => {
     const trimmed = rawValue.trim();
     if (!trimmed) return;
 
-    const normalized = trimmed.replace(/\s+/g, '').toUpperCase();
-    setExpurgoTags(prev => [...prev, normalized]);
+    // Normalizar tag: remover espaços, converter para maiúsculas, remover caracteres especiais
+    const normalized = trimmed.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+    
+    // Normalizar TID e EPC se disponíveis
+    const normalizedTid = options?.tid ? options.tid.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '') : null;
+    const normalizedEpc = options?.epc ? options.epc.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '') : null;
+    
+    // Verificar se a tag já foi processada (evitar duplicatas)
+    if (expurgoTags.some(entry => entry.tag === normalized)) {
+      console.log(`⚠️ [Expurgo] Tag ${normalized} já foi processada, ignorando...`);
+      return;
+    }
 
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.LAUNDRY_EXPURGO_READ}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_CONFIG.API_KEY
-        },
-        body: JSON.stringify({
-          tag: normalized,
-          clientId,
-          source: 'totem-expurgo'
-        })
-      });
+    // Tentar primeiro com a tag fornecida, depois tentar alternativas se falhar
+    const tagsToTry = [normalized];
+    if (options?.epc && options.epc !== normalized) {
+      const normalizedEpc = options.epc.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (normalizedEpc && normalizedEpc !== normalized) tagsToTry.push(normalizedEpc);
+    }
+    if (options?.tid && options.tid !== normalized) {
+      const normalizedTid = options.tid.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (normalizedTid && normalizedTid !== normalized && normalizedTid !== options?.epc) tagsToTry.push(normalizedTid);
+    }
 
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `HTTP ${response.status}`);
+    let tagRegistered = false;
+    let lastError: Error | null = null;
+
+    // Tentar registrar com cada variação da tag
+    for (const tagToTry of tagsToTry) {
+      try {
+        console.log(`📤 [Expurgo] Tentando registrar tag ${tagToTry} (tentativa ${tagsToTry.indexOf(tagToTry) + 1}/${tagsToTry.length})...`);
+        
+        const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.LAUNDRY_EXPURGO_READ}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_CONFIG.API_KEY
+          },
+          body: JSON.stringify({
+            tag: tagToTry,
+            clientId,
+            source: 'totem-expurgo'
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMessage: string;
+          
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorText;
+          } catch {
+            errorMessage = errorText || `HTTP ${response.status}`;
+          }
+
+          // Se não for a última tentativa, continuar loop
+          if (tagsToTry.indexOf(tagToTry) < tagsToTry.length - 1) {
+            console.warn(`⚠️ [Expurgo] Tag ${tagToTry} não encontrada, tentando próxima variação...`);
+            lastError = new Error(errorMessage);
+            continue;
+          }
+          
+          // Se for a última tentativa, lançar erro
+          throw new Error(errorMessage);
+        }
+
+        const responseData = await response.json();
+        console.log(`✅ [Expurgo] Tag ${tagToTry} registrada com sucesso:`, responseData);
+
+        // Adicionar tag ao estado apenas se foi registrada com sucesso
+        setExpurgoTags(prev => {
+          if (prev.some(entry => entry.tag === normalized)) return prev;
+          return [...prev, { 
+            tag: normalized, 
+            tid: normalizedTid || undefined 
+          }];
+        });
+
+        // Atualizar feedback apenas para a última tag processada
+        setExpurgoFeedback({
+          type: 'success',
+          message: `Tag ${normalized} registrada no expurgo.`
+        });
+        
+        // Atualizar fila após um pequeno delay para garantir que o backend processou
+        setTimeout(() => {
+          fetchExpurgoQueue();
+        }, 500);
+
+        tagRegistered = true;
+        break; // Sucesso - sair do loop
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Se for a última tentativa, mostrar erro
+        if (tagsToTry.indexOf(tagToTry) === tagsToTry.length - 1) {
+          console.error(`❌ [Expurgo] Erro ao registrar tag ${tagToTry}:`, lastError);
+          setExpurgoFeedback({
+            type: 'error',
+            message: `Tag ${normalized} não encontrada ou não pode ser registrada no expurgo. Verifique se a peça está cadastrada e disponível.`
+          });
+        }
       }
+    }
 
-      setExpurgoFeedback({
-        type: 'success',
-        message: `Tag ${normalized} registrada no expurgo.`
-      });
-      fetchExpurgoQueue();
-    } catch (error) {
-      console.error('Erro ao registrar tag no expurgo:', error);
-      setExpurgoFeedback({
-        type: 'error',
-        message: `Falha ao registrar a tag ${normalized}.`
-      });
+    if (!tagRegistered && lastError) {
+      console.error(`❌ [Expurgo] Falha ao registrar tag ${normalized} após ${tagsToTry.length} tentativa(s):`, lastError);
     }
   };
 
@@ -517,6 +908,7 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                     </div>
                     <Button
                       onClick={() => {
+                        if (readingActive) stopAssociationReading();
                         setShowAssociationModal(false);
                         setSelectedBatch(null);
                       }}
@@ -593,11 +985,21 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-lg font-semibold text-gray-800">
-                        Tags capturadas ({scannedTags.length})
-                      </h4>
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-800">
+                          Tags capturadas ({scannedTags.length})
+                        </h4>
+                        {selectedBatch && (
+                          <p className="text-sm text-gray-500">
+                            Restam {remainingSlots} de {pendingPieces} tag(s) permitidas para este lote.
+                          </p>
+                        )}
+                      </div>
                       <Button
-                        onClick={() => setScannedTags([])}
+                        onClick={() => {
+                          setScannedTags([]);
+                          setAssociationFeedback(null);
+                        }}
                         variant="secondary"
                         size="sm"
                         disabled={scannedTags.length === 0}
@@ -611,14 +1013,20 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                           Nenhuma tag capturada ainda.
                         </p>
                       ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 font-mono text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                           {scannedTags.map(tag => (
-                            <span
+                            <div
                               key={tag}
-                              className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-700"
+                              className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
                             >
-                              {tag}
-                            </span>
+                              <span className="font-mono text-blue-800">{tag}</span>
+                              <button
+                                className="text-xs text-red-600 hover:text-red-800"
+                                onClick={() => removeScannedTag(tag)}
+                              >
+                                remover
+                              </button>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -643,6 +1051,7 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                   <div className="flex justify-between pt-2">
                     <Button
                       onClick={() => {
+                        if (readingActive) stopAssociationReading();
                         setShowAssociationModal(false);
                         setSelectedBatch(null);
                       }}
@@ -697,26 +1106,49 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                 </div>
 
                 <div className="border-2 border-dashed border-orange-300 rounded-xl bg-orange-50/50 p-6">
-                  <input
-                    ref={hiddenExpurgoInputRef}
-                    type="text"
-                    onKeyDown={handleExpurgoKeyDown}
-                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
-                    aria-hidden="true"
-                  />
-                  <div className="flex items-center gap-4">
-                    <Radio className={expurgoReading ? 'text-orange-500 animate-pulse' : 'text-gray-400'} size={32} />
-                    <div>
-                      <p className="text-lg font-semibold text-gray-800">
-                        {expurgoReading ? 'Leitura em andamento' : 'Leitura parada'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {expurgoReading
-                          ? 'As tags lidas são enviadas automaticamente para o expurgo.'
-                          : 'Toque em “Iniciar” para começar a leitura contínua.'}
-                      </p>
+                  {settings.rfid.readerModel === 'chainway-ur4' ? (
+                    <div className="flex items-center gap-4">
+                      <Radio className={expurgoReading ? 'text-orange-500 animate-pulse' : 'text-gray-400'} size={32} />
+                      <div className="flex-1">
+                        <p className="text-lg font-semibold text-gray-800">
+                          {expurgoReading ? 'Leitura em andamento' : 'Leitura parada'}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {expurgoReading
+                            ? `Leitor UR4 conectado. ${rfidStatus.totalReadings || 0} tag(s) lida(s). As tags são enviadas automaticamente para o expurgo.`
+                            : 'Toque em "Iniciar" para começar a leitura contínua com o leitor UR4.'}
+                        </p>
+                        {!rfidStatus.isConnected && expurgoReading && (
+                          <p className="text-xs text-orange-600 mt-1">
+                            ⚠️ Conectando ao leitor RFID...
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <input
+                        ref={hiddenExpurgoInputRef}
+                        type="text"
+                        onKeyDown={handleExpurgoKeyDown}
+                        className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <div className="flex items-center gap-4">
+                        <Radio className={expurgoReading ? 'text-orange-500 animate-pulse' : 'text-gray-400'} size={32} />
+                        <div>
+                          <p className="text-lg font-semibold text-gray-800">
+                            {expurgoReading ? 'Leitura em andamento' : 'Leitura parada'}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {expurgoReading
+                              ? 'As tags lidas são enviadas automaticamente para o expurgo.'
+                              : 'Toque em "Iniciar" para começar a leitura contínua.'}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -735,11 +1167,16 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                     </p>
                   ) : (
                     <ul className="space-y-2 font-mono text-sm text-gray-700">
-                      {expurgoTags.map((tag, index) => (
-                        <li key={`${tag}-${index}`} className="px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
-                          {tag}
-                        </li>
-                      ))}
+                      {expurgoTags.map((entry, index) => {
+                        const displayTid = entry.tid || entry.tag; // Mostrar TID se disponível, senão mostra a tag
+                        return (
+                          <li key={`${entry.tag}-${index}`} className="px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{displayTid}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
