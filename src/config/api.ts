@@ -21,6 +21,10 @@ export const API_CONFIG = {
       RFID_ASSOCIATE_BATCH: (batchNumber: string | number) =>
         `/api/public/totem/rfid/batch/${batchNumber}/associate`,
       RFID_ASSOCIATE_TAG: '/api/public/totem/rfid/associate-tag',
+      RFID_REPLACE_TAG: '/api/public/totem/rfid/replace-tag',
+      RFID_DETACH_TAG: '/api/public/totem/rfid/detach-tag',
+      RFID_NONCONFORMITY: '/api/public/totem/rfid/nonconformity',
+      RFID_RETIRE: '/api/public/totem/rfid/retire',
       LAUNDRY_EXPURGO_QUEUE: '/api/public/totem/laundry/expurgo',
       LAUNDRY_EXPURGO_READ: '/api/public/totem/laundry/expurgo/read',
       LAUNDRY_COMPARATIVE: '/api/public/totem/laundry/comparative'

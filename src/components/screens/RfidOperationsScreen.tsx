@@ -42,6 +42,66 @@ interface ExpurgoEntry {
   sectorName?: string;
 }
 
+interface AssociationResult {
+  tag: string;
+  status: 'success' | 'error';
+  message?: string;
+  piece?: string;
+}
+
+interface SessionExpurgoTag {
+  tag: string;
+  tid?: string;
+  itemName?: string;
+  status: 'pending' | 'success' | 'error';
+  feedback?: string;
+}
+
+type CleanTab = 'association' | 'nonconformity' | 'maintenance';
+type NonconformityReason = 'relave' | 'dano' | 'mancha' | 'costura';
+
+interface SessionNonconformityTag {
+  tag: string;
+  reason: NonconformityReason;
+  status: 'pending' | 'success' | 'error';
+  feedback?: string;
+}
+
+interface SessionReassignTag {
+  tag: string;
+  reason?: string;
+  status: 'pending' | 'success' | 'error';
+  feedback?: string;
+}
+
+interface SessionRetireTag {
+  tag: string;
+  reason: string;
+  status: 'pending' | 'success' | 'error';
+  feedback?: string;
+}
+
+const NONCONFORMITY_OPTIONS: Array<{ key: NonconformityReason; label: string; description: string; tone: string }> = [
+  { key: 'relave', label: 'Relavagem', description: 'Peças que precisam voltar para lavagem', tone: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { key: 'dano', label: 'Dano', description: 'Danos estruturais (rasgos, queimados)', tone: 'bg-red-100 text-red-800 border-red-200' },
+  { key: 'mancha', label: 'Mancha', description: 'Manchas persistentes após lavagem', tone: 'bg-amber-100 text-amber-800 border-amber-200' },
+  { key: 'costura', label: 'Costura', description: 'Peças que exigem reparos de costura', tone: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+] as const;
+
+const REASSIGN_REASONS = [
+  { value: 'tag_danificada', label: 'Tag danificada' },
+  { value: 'peca_substituida', label: 'Peça substituída' },
+  { value: 'limpar_chip', label: 'Liberação para reuso' },
+  { value: 'outro', label: 'Outro motivo' }
+] as const;
+
+const RETIRE_REASONS = [
+  { value: 'descarte', label: 'Descarte definitivo' },
+  { value: 'dano_cliente', label: 'Dano causado pelo cliente' },
+  { value: 'obsolescencia', label: 'Peça obsoleta / sem condições' },
+  { value: 'extravio', label: 'Extravio / roubo' }
+] as const;
+
 export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBack }) => {
   const { settings } = useSettings();
   const { selectedClient } = useClients();
@@ -56,32 +116,56 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     status: rfidStatus,
     connectToReader,
     startContinuousReading,
-    stopContinuousReading,
-    disconnectFromReader
+    stopContinuousReading
   } = useRFIDReader();
 
   // --------------------------
   // Estado – Associação RFID (modo limpo)
   // --------------------------
-  const [pendingBatches, setPendingBatches] = useState<PendingBatch[]>([]);
-  const [loadingBatches, setLoadingBatches] = useState(false);
-  const [batchesError, setBatchesError] = useState<string | null>(null);
-  const [selectedBatch, setSelectedBatch] = useState<PendingBatch | null>(null);
-  const [showAssociationModal, setShowAssociationModal] = useState(false);
-  const [tagDraft, setTagDraft] = useState('');
-  const [scannedTags, setScannedTags] = useState<string[]>([]);
-  const [readingActive, setReadingActive] = useState(false);
-  const [associationFeedback, setAssociationFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const [associationSubmitting, setAssociationSubmitting] = useState(false);
-  const hiddenCleanInputRef = useRef<HTMLInputElement>(null);
+const [pendingBatches, setPendingBatches] = useState<PendingBatch[]>([]);
+const [loadingBatches, setLoadingBatches] = useState(false);
+const [batchesError, setBatchesError] = useState<string | null>(null);
+const [selectedBatch, setSelectedBatch] = useState<PendingBatch | null>(null);
+const [showAssociationModal, setShowAssociationModal] = useState(false);
+const [tagDraft, setTagDraft] = useState('');
+const [scannedTags, setScannedTags] = useState<string[]>([]);
+const [associationResults, setAssociationResults] = useState<AssociationResult[]>([]);
+const [readingActive, setReadingActive] = useState(false);
+const [associationFeedback, setAssociationFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+const [associationSubmitting, setAssociationSubmitting] = useState(false);
+const hiddenCleanInputRef = useRef<HTMLInputElement>(null);
+const [cleanTab, setCleanTab] = useState<CleanTab>('association');
+const [nonconformityReason, setNonconformityReason] = useState<NonconformityReason | ''>('');
+const [nonconformityTags, setNonconformityTags] = useState<SessionNonconformityTag[]>([]);
+const [nonconformityReading, setNonconformityReading] = useState(false);
+const [nonconformityFeedback, setNonconformityFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+const hiddenNonconformityInputRef = useRef<HTMLInputElement>(null);
+const processedNonconformityTagsRef = useRef<Set<string>>(new Set());
+const lastProcessedNonconformityReadingIdRef = useRef<number>(0);
+const [reassignReason, setReassignReason] = useState<string>(REASSIGN_REASONS[0].value);
+const [reassignNotes, setReassignNotes] = useState('');
+const [reassignTags, setReassignTags] = useState<SessionReassignTag[]>([]);
+const [reassignReading, setReassignReading] = useState(false);
+const [reassignFeedback, setReassignFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+const hiddenReassignInputRef = useRef<HTMLInputElement>(null);
+const processedReassignTagsRef = useRef<Set<string>>(new Set());
+const lastProcessedReassignReadingIdRef = useRef<number>(0);
+const [retireReason, setRetireReason] = useState<string>(RETIRE_REASONS[0]?.value ?? '');
+const [retireNotes, setRetireNotes] = useState('');
+const [retireTags, setRetireTags] = useState<SessionRetireTag[]>([]);
+const [retireReading, setRetireReading] = useState(false);
+const [retireFeedback, setRetireFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+const hiddenRetireInputRef = useRef<HTMLInputElement>(null);
+const processedRetireTagsRef = useRef<Set<string>>(new Set());
+const lastProcessedRetireReadingIdRef = useRef<number>(0);
 
   // --------------------------
   // Estado – Expurgo (modo sujo)
   // --------------------------
-  const [expurgoQueue, setExpurgoQueue] = useState<ExpurgoEntry[]>([]);
-  const [loadingExpurgo, setLoadingExpurgo] = useState(false);
-  const [expurgoError, setExpurgoError] = useState<string | null>(null);
-  const [expurgoTags, setExpurgoTags] = useState<Array<{ tag: string; tid?: string }>>([]);
+const [expurgoQueue, setExpurgoQueue] = useState<ExpurgoEntry[]>([]);
+const [loadingExpurgo, setLoadingExpurgo] = useState(false);
+const [expurgoError, setExpurgoError] = useState<string | null>(null);
+const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
   const [expurgoReading, setExpurgoReading] = useState(false);
   const [expurgoFeedback, setExpurgoFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const hiddenExpurgoInputRef = useRef<HTMLInputElement>(null);
@@ -362,12 +446,11 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
         const newEntries = tagsToProcess
           .filter(t => !existingTags.has(t.tag))
           .map(({ tag, readingId }) => {
-            // Encontrar a leitura original para obter TID
             const originalReading = rfidReadings.find(r => r.id === readingId);
             const tid = originalReading?.tid 
               ? originalReading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '')
               : undefined;
-            return { tag, tid };
+            return { tag, tid, status: 'pending' as const };
           });
         
         if (newEntries.length > 0) {
@@ -410,6 +493,7 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     // Comentário: ao abrir o modal, limpamos estados de leitura anteriores.
     setSelectedBatch(batch);
     setScannedTags([]);
+  setAssociationResults([]);
     setTagDraft('');
     setReadingActive(false);
     setAssociationFeedback(null);
@@ -427,6 +511,8 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
 
     // Comentário: Normalizamos a tag para remoção de espaços e letras em maiúsculo.
     const normalized = trimmed.replace(/\s+/g, '').toUpperCase();
+
+    setAssociationResults(prev => prev.filter(entry => entry.tag !== normalized));
 
     setScannedTags(prev => {
       if (prev.includes(normalized)) {
@@ -456,6 +542,7 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
 
   const removeScannedTag = useCallback((tag: string) => {
     setScannedTags(prev => prev.filter(item => item !== tag));
+    setAssociationResults(prev => prev.filter(entry => entry.tag !== tag));
   }, []);
 
   // Processar tags recebidas do leitor real UR4 - modo associação
@@ -535,19 +622,545 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     }
   }, [readingActive, showAssociationModal, stopAssociationReading]);
 
+  const handleNonconformityTag = useCallback(async (rawValue: string) => {
+    const trimmed = rawValue.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+    if (!normalized) return;
+
+    if (!clientId) {
+      setNonconformityFeedback({ type: 'error', message: 'Configure o cliente nas configurações antes de registrar inconformidades.' });
+      return;
+    }
+
+    if (!nonconformityReason) {
+      setNonconformityFeedback({ type: 'error', message: 'Selecione o motivo da inconformidade antes de ler a tag.' });
+      return;
+    }
+
+    setNonconformityTags(prev => {
+      if (prev.some(entry => entry.tag === normalized)) return prev;
+      return [...prev, { tag: normalized, reason: nonconformityReason, status: 'pending' }];
+    });
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_NONCONFORMITY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_CONFIG.API_KEY
+        },
+        body: JSON.stringify({
+          clientId,
+          reason: nonconformityReason,
+          tag: normalized
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Falha ao registrar inconformidade');
+      }
+
+      const data = await response.json();
+      setNonconformityTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized
+            ? {
+                ...entry,
+                status: 'success',
+                feedback: data?.item?.fullNumber
+                  ? `Peça ${data.item.fullNumber} encaminhada`
+                  : 'Registrada com sucesso'
+              }
+            : entry
+        )
+      );
+
+      const reasonLabel = NONCONFORMITY_OPTIONS.find(option => option.key === nonconformityReason)?.label;
+      setNonconformityFeedback({
+        type: 'success',
+        message: reasonLabel
+          ? `Tag ${normalized} enviada para ${reasonLabel}.`
+          : `Tag ${normalized} registrada.`
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao registrar inconformidade';
+      setNonconformityTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized ? { ...entry, status: 'error', feedback: message } : entry
+        )
+      );
+      setNonconformityFeedback({ type: 'error', message });
+    }
+  }, [clientId, nonconformityReason]);
+
+  const handleNonconformityKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const value = event.currentTarget.value;
+      event.currentTarget.value = '';
+      handleNonconformityTag(value);
+    }
+  };
+
+  const startNonconformityReading = useCallback(async () => {
+    if (!nonconformityReason) {
+      setNonconformityFeedback({ type: 'error', message: 'Selecione o motivo da inconformidade antes de iniciar a leitura.' });
+      return;
+    }
+
+    setNonconformityFeedback(null);
+
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      try {
+        if (!rfidStatus.isConnected) {
+          await connectToReader();
+        }
+        startContinuousReading();
+        setNonconformityReading(true);
+      } catch (error) {
+        console.error('❌ [Inconformidade] Erro ao iniciar leitura RFID:', error);
+        setNonconformityFeedback({
+          type: 'error',
+          message: 'Erro ao conectar ao leitor RFID. Verifique as configurações.'
+        });
+      }
+    } else {
+      setNonconformityReading(true);
+      setTimeout(() => hiddenNonconformityInputRef.current?.focus(), 50);
+    }
+  }, [connectToReader, nonconformityReason, rfidStatus.isConnected, settings.rfid.readerModel, startContinuousReading]);
+
+  const stopNonconformityReading = useCallback(() => {
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      stopContinuousReading();
+    } else {
+      hiddenNonconformityInputRef.current?.blur();
+    }
+    setNonconformityReading(false);
+  }, [settings.rfid.readerModel, stopContinuousReading]);
+
+  useEffect(() => {
+    if (nonconformityReading) {
+      if (settings.rfid.readerModel !== 'chainway-ur4') {
+        hiddenNonconformityInputRef.current?.focus();
+      }
+    } else {
+      processedNonconformityTagsRef.current.clear();
+      lastProcessedNonconformityReadingIdRef.current = 0;
+    }
+  }, [nonconformityReading, settings.rfid.readerModel]);
+
+  useEffect(() => {
+    if (!isCleanMode || cleanTab !== 'nonconformity' || !nonconformityReading || settings.rfid.readerModel !== 'chainway-ur4' || !rfidReadings.length) {
+      return;
+    }
+
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedNonconformityReadingIdRef.current);
+    if (newReadings.length === 0) return;
+
+    newReadings.forEach(reading => {
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const tag = tid || epc;
+      if (tag && !processedNonconformityTagsRef.current.has(tag)) {
+        processedNonconformityTagsRef.current.add(tag);
+        handleNonconformityTag(tag);
+        setTimeout(() => processedNonconformityTagsRef.current.delete(tag), 5000);
+      }
+    });
+
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedNonconformityReadingIdRef.current = maxId;
+  }, [cleanTab, handleNonconformityTag, isCleanMode, nonconformityReading, rfidReadings, settings.rfid.readerModel]);
+
+  const handleReassignKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const value = event.currentTarget.value;
+      event.currentTarget.value = '';
+      handleReassignTagScan(value);
+    }
+  };
+
+  const handleRetireKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const value = event.currentTarget.value;
+      event.currentTarget.value = '';
+      handleRetireTagScan(value);
+    }
+  };
+
+  const startReassignReading = useCallback(async () => {
+    if (!clientId) {
+      setReassignFeedback({ type: 'error', message: 'Selecione o cliente antes de iniciar a leitura.' });
+      return;
+    }
+    setReassignFeedback(null);
+
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      try {
+        if (!rfidStatus.isConnected) {
+          await connectToReader();
+        }
+        startContinuousReading();
+        setReassignReading(true);
+      } catch (error) {
+        console.error('❌ [Reassociação] Erro ao iniciar leitura RFID:', error);
+        setReassignFeedback({
+          type: 'error',
+          message: 'Erro ao conectar ao leitor RFID. Verifique as configurações.'
+        });
+      }
+    } else {
+      setReassignReading(true);
+      setTimeout(() => hiddenReassignInputRef.current?.focus(), 50);
+    }
+  }, [clientId, connectToReader, rfidStatus.isConnected, settings.rfid.readerModel, startContinuousReading]);
+
+  const stopReassignReading = useCallback(() => {
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      stopContinuousReading();
+    } else {
+      hiddenReassignInputRef.current?.blur();
+    }
+    setReassignReading(false);
+    processedReassignTagsRef.current.clear();
+    lastProcessedReassignReadingIdRef.current = 0;
+  }, [settings.rfid.readerModel, stopContinuousReading]);
+
+  const startRetireReading = useCallback(async () => {
+    if (!clientId) {
+      setRetireFeedback({ type: 'error', message: 'Selecione o cliente antes de iniciar a leitura.' });
+      return;
+    }
+    if (!retireReason) {
+      setRetireFeedback({ type: 'error', message: 'Selecione o motivo da baixa antes de iniciar.' });
+      return;
+    }
+
+    setRetireFeedback(null);
+
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      try {
+        if (!rfidStatus.isConnected) {
+          await connectToReader();
+        }
+        startContinuousReading();
+        setRetireReading(true);
+      } catch (error) {
+        console.error('❌ [Baixa] Erro ao iniciar leitura RFID:', error);
+        setRetireFeedback({
+          type: 'error',
+          message: 'Erro ao conectar ao leitor RFID. Verifique as configurações.'
+        });
+      }
+    } else {
+      setRetireReading(true);
+      setTimeout(() => hiddenRetireInputRef.current?.focus(), 50);
+    }
+  }, [clientId, connectToReader, retireReason, rfidStatus.isConnected, settings.rfid.readerModel, startContinuousReading]);
+
+  const stopRetireReading = useCallback(() => {
+    if (settings.rfid.readerModel === 'chainway-ur4') {
+      stopContinuousReading();
+    } else {
+      hiddenRetireInputRef.current?.blur();
+    }
+    setRetireReading(false);
+    processedRetireTagsRef.current.clear();
+    lastProcessedRetireReadingIdRef.current = 0;
+  }, [settings.rfid.readerModel, stopContinuousReading]);
+
+  const handleReassignTagScan = useCallback(async (rawValue: string) => {
+    const normalized = normalizeTagValue(rawValue);
+    if (!normalized) return;
+
+    if (!clientId) {
+      setReassignFeedback({ type: 'error', message: 'Configure o cliente do totem antes de liberar tags.' });
+      return;
+    }
+
+    setReassignTags(prev => {
+      const existing = prev.find(entry => entry.tag === normalized);
+      if (existing) {
+        return prev.map(entry =>
+          entry.tag === normalized ? { ...entry, status: 'pending', feedback: undefined, reason: reassignReason } : entry
+        );
+      }
+      return [...prev, { tag: normalized, status: 'pending', reason: reassignReason }];
+    });
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_DETACH_TAG}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_CONFIG.API_KEY
+        },
+        body: JSON.stringify({
+          clientId,
+          tag: normalized,
+          reason: reassignReason,
+          notes: reassignNotes ? `${reassignNotes} - ${new Date().toLocaleString()}` : undefined
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Falha ao liberar tag');
+      }
+
+      const data = await response.json();
+      setReassignTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized
+            ? {
+                ...entry,
+                status: 'success',
+                feedback: data?.item?.fullNumber
+                  ? `Peça ${data.item.fullNumber} liberada para nova associação.`
+                  : 'Tag liberada.'
+              }
+            : entry
+        )
+      );
+      setReassignFeedback({
+        type: 'success',
+        message: data?.item?.fullNumber
+          ? `Peça ${data.item.fullNumber} aguardando nova tag.`
+          : `Tag ${normalized} liberada.`
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao liberar tag';
+      setReassignTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized ? { ...entry, status: 'error', feedback: message } : entry
+        )
+      );
+      setReassignFeedback({ type: 'error', message });
+    }
+  }, [clientId, reassignNotes, reassignReason]);
+
+  const handleRetireTagScan = useCallback(async (rawValue: string) => {
+    const normalized = normalizeTagValue(rawValue);
+    if (!normalized) return;
+
+    if (!clientId) {
+      setRetireFeedback({ type: 'error', message: 'Configure o cliente do totem antes de baixar peças.' });
+      return;
+    }
+    if (!retireReason) {
+      setRetireFeedback({ type: 'error', message: 'Selecione o motivo da baixa antes de iniciar a leitura.' });
+      return;
+    }
+
+    setRetireTags(prev => {
+      const existing = prev.find(entry => entry.tag === normalized);
+      if (existing) {
+        return prev.map(entry =>
+          entry.tag === normalized ? { ...entry, status: 'pending', feedback: undefined, reason: retireReason } : entry
+        );
+      }
+      return [...prev, { tag: normalized, status: 'pending', reason: retireReason }];
+    });
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_RETIRE}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_CONFIG.API_KEY
+        },
+        body: JSON.stringify({
+          clientId,
+          tag: normalized,
+          reason: retireReason,
+          notes: retireNotes ? `${retireNotes} - ${new Date().toLocaleString()}` : undefined,
+          releaseTag: true
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Falha ao baixar peça');
+      }
+
+      const data = await response.json();
+      setRetireTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized
+            ? {
+                ...entry,
+                status: 'success',
+                feedback: data?.item?.fullNumber
+                  ? `Peça ${data.item.fullNumber} baixada.`
+                  : 'Baixa registrada.'
+              }
+            : entry
+        )
+      );
+      setRetireFeedback({
+        type: 'success',
+        message: data?.item?.fullNumber
+          ? `Peça ${data.item.fullNumber} registrada como ${retireReason}.`
+          : `Baixa registrada (${retireReason}).`
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao baixar peça';
+      setRetireTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized ? { ...entry, status: 'error', feedback: message } : entry
+        )
+      );
+      setRetireFeedback({ type: 'error', message });
+    }
+  }, [clientId, retireNotes, retireReason]);
+
+  useEffect(() => {
+    if (cleanTab !== 'association' && readingActive) {
+      stopAssociationReading();
+    }
+    if (cleanTab !== 'nonconformity' && nonconformityReading) {
+      stopNonconformityReading();
+    }
+    if (cleanTab !== 'maintenance' && reassignReading) {
+      stopReassignReading();
+    }
+    if (cleanTab !== 'maintenance' && retireReading) {
+      stopRetireReading();
+    }
+  }, [
+    cleanTab,
+    nonconformityReading,
+    readingActive,
+    reassignReading,
+    retireReading,
+    stopAssociationReading,
+    stopNonconformityReading,
+    stopReassignReading,
+    stopRetireReading
+  ]);
+
+  const clearReassignSession = useCallback(() => {
+    setReassignTags([]);
+    setReassignFeedback(null);
+  }, []);
+
+  const clearRetireSession = useCallback(() => {
+    setRetireTags([]);
+    setRetireFeedback(null);
+  }, []);
+
+  useEffect(() => {
+    if (!reassignReading) {
+      processedReassignTagsRef.current.clear();
+      lastProcessedReassignReadingIdRef.current = 0;
+      return;
+    }
+    if (cleanTab === 'maintenance' && settings.rfid.readerModel !== 'chainway-ur4') {
+      hiddenReassignInputRef.current?.focus();
+    }
+  }, [cleanTab, reassignReading, settings.rfid.readerModel]);
+
+  useEffect(() => {
+    if (!retireReading) {
+      processedRetireTagsRef.current.clear();
+      lastProcessedRetireReadingIdRef.current = 0;
+      return;
+    }
+    if (cleanTab === 'maintenance' && settings.rfid.readerModel !== 'chainway-ur4') {
+      hiddenRetireInputRef.current?.focus();
+    }
+  }, [cleanTab, retireReading, settings.rfid.readerModel]);
+
+  useEffect(() => {
+    if (
+      !isCleanMode ||
+      cleanTab !== 'maintenance' ||
+      !reassignReading ||
+      settings.rfid.readerModel !== 'chainway-ur4' ||
+      !rfidReadings.length
+    ) {
+      return;
+    }
+
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedReassignReadingIdRef.current);
+    if (newReadings.length === 0) return;
+
+    newReadings.forEach(reading => {
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const tag = tid || epc;
+
+      if (tag && !processedReassignTagsRef.current.has(tag)) {
+        processedReassignTagsRef.current.add(tag);
+        handleReassignTagScan(tag);
+        setTimeout(() => processedReassignTagsRef.current.delete(tag), 5000);
+      }
+    });
+
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedReassignReadingIdRef.current = maxId;
+  }, [cleanTab, handleReassignTagScan, isCleanMode, reassignReading, rfidReadings, settings.rfid.readerModel]);
+
+  useEffect(() => {
+    if (
+      !isCleanMode ||
+      cleanTab !== 'maintenance' ||
+      !retireReading ||
+      settings.rfid.readerModel !== 'chainway-ur4' ||
+      !rfidReadings.length
+    ) {
+      return;
+    }
+
+    const newReadings = rfidReadings.filter(reading => reading.id > lastProcessedRetireReadingIdRef.current);
+    if (newReadings.length === 0) return;
+
+    newReadings.forEach(reading => {
+      const tid = reading.tid ? reading.tid.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const epc = reading.epc ? reading.epc.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '') : null;
+      const tag = tid || epc;
+
+      if (tag && !processedRetireTagsRef.current.has(tag)) {
+        processedRetireTagsRef.current.add(tag);
+        handleRetireTagScan(tag);
+        setTimeout(() => processedRetireTagsRef.current.delete(tag), 5000);
+      }
+    });
+
+    const maxId = Math.max(...newReadings.map(r => r.id));
+    lastProcessedRetireReadingIdRef.current = maxId;
+  }, [cleanTab, handleRetireTagScan, isCleanMode, retireReading, rfidReadings, settings.rfid.readerModel]);
+
+  const normalizeTagValue = useCallback((value: string) => {
+    return value.trim().toUpperCase().replace(/\s+/g, '').replace(/[^0-9A-F]/g, '');
+  }, []);
+
   const handleAssociationSubmit = async () => {
     if (!selectedBatch) return;
+    if (!clientId) {
+      setAssociationFeedback({ type: 'error', message: 'Selecione/configure o cliente do totem antes de associar.' });
+      return;
+    }
     if (scannedTags.length === 0) {
       setAssociationFeedback({ type: 'error', message: 'Capture ao menos uma tag antes de confirmar.' });
+      return;
+    }
+    if (!selectedBatch.itemId) {
+      setAssociationFeedback({ type: 'error', message: 'Lote sem itemId. Atualize a lista e tente novamente.' });
       return;
     }
 
     setAssociationSubmitting(true);
     setAssociationFeedback(null);
-    if (!selectedBatch.itemId) {
-      setAssociationFeedback({ type: 'error', message: 'Lote sem itemId. Atualize a lista e tente novamente.' });
-      return;
-    }
+
+    const payloadTags = scannedTags
+      .map(tag => tag.trim().toUpperCase().replace(/\s+/g, ''))
+      .filter(tag => tag.length > 0);
 
     try {
       const endpoint = API_CONFIG.ENDPOINTS.TOTEM.RFID_ASSOCIATE_BATCH(selectedBatch.batchNumber);
@@ -558,29 +1171,81 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
           'x-api-key': API_CONFIG.API_KEY
         },
         body: JSON.stringify({
-          tags: scannedTags,
+          tags: payloadTags,
           clientId,
           itemId: selectedBatch.itemId
         })
       });
 
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `HTTP ${response.status}`);
+      const rawResponse = await response.text();
+      let data: any = null;
+      if (rawResponse) {
+        try {
+          data = JSON.parse(rawResponse);
+        } catch {
+          data = null;
+        }
       }
 
+      if (!response.ok) {
+        throw new Error(data?.error || rawResponse || `HTTP ${response.status}`);
+      }
+
+      const pieces: Array<any> = Array.isArray(data?.pieces) ? data.pieces : [];
+      const errors: Array<any> = Array.isArray(data?.errors) ? data.errors : [];
+
+      const successEntries: AssociationResult[] = pieces
+        .filter(piece => typeof piece?.rfidTagUid === 'string' && piece.rfidTagUid.length > 0)
+        .map(piece => ({
+          tag: piece.rfidTagUid,
+          status: 'success',
+          piece: piece.fullNumber,
+          message: piece.item?.name ? `${piece.item.name} (${piece.fullNumber})` : `Peça ${piece.fullNumber}`
+        }));
+
+      const errorEntries: AssociationResult[] = errors.map(entry => ({
+        tag: typeof entry?.tag === 'string' && entry.tag.length > 0 ? entry.tag : '(sem tag)',
+        status: 'error',
+        message: entry?.error || 'Erro ao associar tag'
+      }));
+
+      const results = [...successEntries, ...errorEntries];
+      setAssociationResults(results);
+
+      const successSet = new Set(successEntries.map(entry => entry.tag));
+      const remaining = scannedTags.filter(tag => !successSet.has(tag));
+      setScannedTags(remaining);
+
+      if (successSet.size > 0 && remaining.length === 0) {
+        setReadingActive(false);
+      }
+
+      const successCount = successEntries.length;
+      const errorCount = errorEntries.length;
+
       setAssociationFeedback({
-        type: 'success',
-        message: `${scannedTags.length} tag(s) vinculada(s) ao lote ${selectedBatch.batchNumber}.`
+        type: errorCount === 0 ? 'success' : successCount > 0 ? 'info' : 'error',
+        message:
+          errorCount === 0
+            ? `${successCount} tag(s) associada(s) ao lote ${selectedBatch.batchNumber}.`
+            : `${successCount} tag(s) associada(s) e ${errorCount} falha(s). Verifique a lista para tentar novamente.`
       });
-      setScannedTags([]);
-      setReadingActive(false);
+
+      setSelectedBatch(prev =>
+        prev
+          ? {
+              ...prev,
+              associatedTags: Math.min(prev.quantity, (prev.associatedTags ?? 0) + successCount)
+            }
+          : prev
+      );
+
       await fetchPendingBatches();
     } catch (error) {
       console.error('Erro ao associar tags ao lote:', error);
       setAssociationFeedback({
         type: 'error',
-        message: 'Não foi possível associar as tags. Verifique a conexão e tente novamente.'
+        message: error instanceof Error ? error.message : 'Não foi possível associar as tags. Verifique a conexão e tente novamente.'
       });
     } finally {
       setAssociationSubmitting(false);
@@ -655,23 +1320,35 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
     
     // Normalizar TID e EPC se disponíveis
     const normalizedTid = options?.tid ? options.tid.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '') : null;
-    const normalizedEpc = options?.epc ? options.epc.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '') : null;
     
+    const alreadyTracked = expurgoTags.some(entry => entry.tag === normalized);
     // Verificar se a tag já foi processada (evitar duplicatas)
-    if (expurgoTags.some(entry => entry.tag === normalized)) {
+    if (alreadyTracked) {
       console.log(`⚠️ [Expurgo] Tag ${normalized} já foi processada, ignorando...`);
       return;
     }
 
+    setExpurgoTags(prev => {
+      if (prev.some(entry => entry.tag === normalized)) return prev;
+      return [
+        ...prev,
+        {
+          tag: normalized,
+          tid: normalizedTid || undefined,
+          status: 'pending' as const
+        }
+      ];
+    });
+
     // Tentar primeiro com a tag fornecida, depois tentar alternativas se falhar
     const tagsToTry = [normalized];
     if (options?.epc && options.epc !== normalized) {
-      const normalizedEpc = options.epc.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
-      if (normalizedEpc && normalizedEpc !== normalized) tagsToTry.push(normalizedEpc);
+      const altEpc = options.epc.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (altEpc && altEpc !== normalized) tagsToTry.push(altEpc);
     }
     if (options?.tid && options.tid !== normalized) {
-      const normalizedTid = options.tid.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
-      if (normalizedTid && normalizedTid !== normalized && normalizedTid !== options?.epc) tagsToTry.push(normalizedTid);
+      const altTid = options.tid.replace(/\s+/g, '').toUpperCase().replace(/[^0-9A-F]/g, '');
+      if (altTid && altTid !== normalized && altTid !== options?.epc) tagsToTry.push(altTid);
     }
 
     let tagRegistered = false;
@@ -720,14 +1397,23 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
         const responseData = await response.json();
         console.log(`✅ [Expurgo] Tag ${tagToTry} registrada com sucesso:`, responseData);
 
-        // Adicionar tag ao estado apenas se foi registrada com sucesso
-        setExpurgoTags(prev => {
-          if (prev.some(entry => entry.tag === normalized)) return prev;
-          return [...prev, { 
-            tag: normalized, 
-            tid: normalizedTid || undefined 
-          }];
-        });
+        const registeredItem = responseData?.rfidItem;
+        setExpurgoTags(prev =>
+          prev.map(entry =>
+            entry.tag === normalized
+              ? {
+                  ...entry,
+                  status: 'success',
+                  itemName: registeredItem?.item?.name ?? entry.itemName,
+                  feedback: registeredItem?.fullNumber
+                    ? `${registeredItem.fullNumber}${
+                        registeredItem?.item?.name ? ` • ${registeredItem.item.name}` : ''
+                      }`
+                    : entry.feedback
+                }
+              : entry
+          )
+        );
 
         // Atualizar feedback apenas para a última tag processada
         setExpurgoFeedback({
@@ -752,12 +1438,34 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
             type: 'error',
             message: `Tag ${normalized} não encontrada ou não pode ser registrada no expurgo. Verifique se a peça está cadastrada e disponível.`
           });
+          setExpurgoTags(prev =>
+            prev.map(entry =>
+              entry.tag === normalized
+                ? {
+                    ...entry,
+                    status: 'error',
+                    feedback: lastError?.message || 'Erro ao registrar tag'
+                  }
+                : entry
+            )
+          );
         }
       }
     }
 
     if (!tagRegistered && lastError) {
       console.error(`❌ [Expurgo] Falha ao registrar tag ${normalized} após ${tagsToTry.length} tentativa(s):`, lastError);
+      setExpurgoTags(prev =>
+        prev.map(entry =>
+          entry.tag === normalized
+            ? {
+                ...entry,
+                status: 'error',
+                feedback: lastError.message
+              }
+            : entry
+        )
+      );
     }
   };
 
@@ -814,6 +1522,30 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
       <main className="p-8 space-y-8">
         {isCleanMode ? (
           <>
+            <section className="mb-4">
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { key: 'association' as CleanTab, label: 'Associação' },
+                  { key: 'nonconformity' as CleanTab, label: 'Inconformidades' },
+                  { key: 'maintenance' as CleanTab, label: 'Manutenção' }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setCleanTab(tab.key)}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-all border ${
+                      cleanTab === tab.key
+                        ? 'bg-blue-600 text-white border-blue-700 shadow-lg'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {cleanTab === 'association' && (
+              <>
             {/* Lista de lotes pendentes */}
             <section>
               <Card className="p-6 bg-white shadow-lg border border-gray-200">
@@ -910,6 +1642,8 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                       onClick={() => {
                         if (readingActive) stopAssociationReading();
                         setShowAssociationModal(false);
+                        setScannedTags([]);
+                        setAssociationResults([]);
                         setSelectedBatch(null);
                       }}
                       variant="secondary"
@@ -998,6 +1732,7 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                       <Button
                         onClick={() => {
                           setScannedTags([]);
+                          setAssociationResults([]);
                           setAssociationFeedback(null);
                         }}
                         variant="secondary"
@@ -1014,24 +1749,81 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                         </p>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                          {scannedTags.map(tag => (
-                            <div
-                              key={tag}
-                              className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
-                            >
-                              <span className="font-mono text-blue-800">{tag}</span>
-                              <button
-                                className="text-xs text-red-600 hover:text-red-800"
-                                onClick={() => removeScannedTag(tag)}
+                          {scannedTags.map(tag => {
+                            const tagResult = associationResults.find(result => result.tag === tag);
+                            return (
+                              <div
+                                key={tag}
+                                className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
                               >
-                                remover
-                              </button>
-                            </div>
-                          ))}
+                                <div className="flex flex-col">
+                                  <span className="font-mono text-blue-800 font-semibold">{tag}</span>
+                                  {tagResult?.message && (
+                                    <span
+                                      className={`text-xs ${
+                                        tagResult.status === 'error' ? 'text-red-600' : 'text-emerald-600'
+                                      }`}
+                                    >
+                                      {tagResult.message}
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  className="text-xs text-red-600 hover:text-red-800"
+                                  onClick={() => removeScannedTag(tag)}
+                                >
+                                  remover
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {associationResults.length > 0 && (
+                    <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-sm font-semibold text-gray-700">
+                          Resultado da última associação
+                        </h5>
+                        <span className="text-xs text-gray-500">
+                          {associationResults.filter(r => r.status === 'success').length} sucesso(s) ·{' '}
+                          {associationResults.filter(r => r.status === 'error').length} erro(s)
+                        </span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-2">
+                        {associationResults.map(result => (
+                          <div
+                            key={`${result.tag}-${result.status}-${result.message}`}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm ${
+                              result.status === 'success'
+                                ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                                : 'bg-red-50 border-red-100 text-red-700'
+                            }`}
+                          >
+                            <div>
+                              <p className="font-mono font-semibold">{result.tag}</p>
+                              {result.piece && (
+                                <p className="text-xs">
+                                  {result.piece}
+                                </p>
+                              )}
+                              {result.message && (
+                                <p className="text-xs">
+                                  {result.message}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-xs font-bold uppercase">
+                              {result.status === 'success' ? 'OK' : 'Erro'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {associationFeedback && (
                     <div
@@ -1053,6 +1845,8 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                       onClick={() => {
                         if (readingActive) stopAssociationReading();
                         setShowAssociationModal(false);
+                        setScannedTags([]);
+                        setAssociationResults([]);
                         setSelectedBatch(null);
                       }}
                       variant="secondary"
@@ -1078,6 +1872,406 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                   </div>
                 </Card>
               </div>
+            )}
+              </>
+            )}
+
+            {cleanTab === 'nonconformity' && (
+              <section>
+                <Card className="p-6 bg-white shadow-lg border border-gray-200 space-y-6">
+                  <div className="flex flex-col gap-2">
+                    <h2 className="text-2xl font-bold text-gray-800">Registro de inconformidades</h2>
+                    <p className="text-sm text-gray-600">
+                      Leia as peças que precisam voltar para relavagem, manutenção ou ajustes de qualidade. Elas serão encaminhadas automaticamente para o processo correto.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    {NONCONFORMITY_OPTIONS.map(option => (
+                      <button
+                        key={option.key}
+                        onClick={() => setNonconformityReason(option.key)}
+                        className={`border rounded-2xl p-4 text-left transition-all ${
+                          nonconformityReason === option.key
+                            ? `${option.tone} shadow-lg`
+                            : 'border-gray-200 bg-gray-50 hover:border-blue-200'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold">{option.label}</p>
+                        <p className="text-xs text-gray-600 mt-1">{option.description}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="border-2 border-dashed border-amber-300 rounded-xl p-6 bg-amber-50/50">
+                    <input
+                      ref={hiddenNonconformityInputRef}
+                      type="text"
+                      onKeyDown={handleNonconformityKeyDown}
+                      className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                      aria-hidden="true"
+                    />
+
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Radio className={nonconformityReading ? 'text-amber-500 animate-pulse' : 'text-gray-400'} size={32} />
+                        <div>
+                          <p className="text-lg font-semibold text-gray-800">
+                            {nonconformityReading ? 'Leitura em andamento' : 'Leitura parada'}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {nonconformityReading
+                              ? 'Passe as peças com problemas no leitor. Cada leitura será registrada automaticamente.'
+                              : 'Escolha o motivo acima e toque em “Iniciar leitura”.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {nonconformityReading ? (
+                          <Button onClick={stopNonconformityReading} variant="secondary" size="sm" icon={Square}>
+                            Parar leitura
+                          </Button>
+                        ) : (
+                          <Button onClick={startNonconformityReading} variant="primary" size="sm" icon={Play}>
+                            Iniciar leitura
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-800">
+                          Tags processadas ({nonconformityTags.length})
+                        </h4>
+                        <p className="text-sm text-gray-500">
+                          Motivo atual:{' '}
+                          {nonconformityReason
+                            ? NONCONFORMITY_OPTIONS.find(option => option.key === nonconformityReason)?.label
+                            : 'Nenhum motivo selecionado'}
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          setNonconformityTags([]);
+                          setNonconformityFeedback(null);
+                        }}
+                        variant="secondary"
+                        size="sm"
+                        disabled={nonconformityTags.length === 0}
+                      >
+                        Limpar lista
+                      </Button>
+                    </div>
+                    <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto bg-white p-4">
+                      {nonconformityTags.length === 0 ? (
+                        <p className="text-sm text-gray-500 text-center py-6">
+                          Nenhuma leitura registrada ainda.
+                        </p>
+                      ) : (
+                        <ul className="space-y-2 text-sm font-mono">
+                          {nonconformityTags.map(entry => (
+                            <li
+                              key={`${entry.tag}-${entry.reason}`}
+                              className={`px-3 py-2 rounded-lg border flex items-center justify-between ${
+                                entry.status === 'success'
+                                  ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                                  : entry.status === 'error'
+                                  ? 'bg-red-50 border-red-100 text-red-700'
+                                  : 'bg-white border-gray-200 text-gray-700'
+                              }`}
+                            >
+                              <div>
+                                <p className="font-semibold">{entry.tag}</p>
+                                <p className="text-xs">
+                                  {NONCONFORMITY_OPTIONS.find(option => option.key === entry.reason)?.label || entry.reason.toUpperCase()}
+                                </p>
+                                {entry.feedback && <p className="text-xs">{entry.feedback}</p>}
+                              </div>
+                              <span className="text-xs font-bold uppercase">
+                                {entry.status === 'success'
+                                  ? 'Registrada'
+                                  : entry.status === 'error'
+                                  ? 'Erro'
+                                  : 'Pendente'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  {nonconformityFeedback && (
+                    <div
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
+                        nonconformityFeedback.type === 'success'
+                          ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                          : 'bg-red-50 border-red-100 text-red-700'
+                      }`}
+                    >
+                      <AlertCircle size={18} />
+                      <span className="text-sm font-medium">{nonconformityFeedback.message}</span>
+                    </div>
+                  )}
+                </Card>
+              </section>
+            )}
+
+            {cleanTab === 'maintenance' && (
+              <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <Card className="p-6 bg-white shadow-lg border border-gray-200 space-y-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-800">Liberar tags para reassociação</h2>
+                      <p className="text-sm text-gray-600">
+                        Escolha o motivo, inicie a leitura e aproxime as tags antigas para liberar automaticamente as peças.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={clearReassignSession}
+                        variant="secondary"
+                        size="sm"
+                        disabled={reassignTags.length === 0}
+                      >
+                        Limpar
+                      </Button>
+                      {reassignReading ? (
+                        <Button onClick={stopReassignReading} variant="secondary" size="sm" icon={Square}>
+                          Parar
+                        </Button>
+                      ) : (
+                        <Button onClick={startReassignReading} variant="primary" size="sm" icon={Play}>
+                          Iniciar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-gray-500">Motivo</label>
+                      <select
+                        value={reassignReason}
+                        onChange={event => setReassignReason(event.target.value)}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                      >
+                        {REASSIGN_REASONS.map(reason => (
+                          <option key={reason.value} value={reason.value}>
+                            {reason.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-gray-500">Observações (opcional)</label>
+                      <input
+                        type="text"
+                        value={reassignNotes}
+                        onChange={event => setReassignNotes(event.target.value)}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        placeholder="Ex.: Tag queimada, peça intacta"
+                      />
+                    </div>
+                  </div>
+
+                  <input
+                    ref={hiddenReassignInputRef}
+                    type="text"
+                    onKeyDown={handleReassignKeyDown}
+                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                    aria-hidden="true"
+                  />
+
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-semibold text-gray-800">
+                      Tags processadas ({reassignTags.length})
+                    </h4>
+                    <span className="text-sm text-gray-500">
+                      {reassignReading ? 'Lendo tags...' : 'Leitura parada'}
+                    </span>
+                  </div>
+                  <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto bg-white p-4">
+                    {reassignTags.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-6">
+                        Inicie a leitura e aproxime as tags antigas para liberá-las.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm font-mono">
+                        {reassignTags.map(entry => {
+                          const reasonLabel = REASSIGN_REASONS.find(option => option.value === entry.reason)?.label || entry.reason;
+                          return (
+                            <li
+                              key={entry.tag}
+                              className={`px-3 py-2 rounded-lg border flex items-center justify-between gap-4 ${
+                                entry.status === 'success'
+                                  ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                                  : entry.status === 'error'
+                                  ? 'bg-red-50 border-red-100 text-red-700'
+                                  : 'bg-white border-gray-200 text-gray-700'
+                              }`}
+                            >
+                              <div>
+                                <p className="font-semibold">{entry.tag}</p>
+                                {reasonLabel && <p className="text-xs text-gray-600">{reasonLabel}</p>}
+                                {entry.feedback && <p className="text-xs">{entry.feedback}</p>}
+                              </div>
+                              <span className="text-xs font-bold uppercase">
+                                {entry.status === 'success'
+                                  ? 'Liberada'
+                                  : entry.status === 'error'
+                                  ? 'Erro'
+                                  : 'Pendente'}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {reassignFeedback && (
+                    <div
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
+                        reassignFeedback.type === 'success'
+                          ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                          : 'bg-red-50 border-red-100 text-red-700'
+                      }`}
+                    >
+                      <AlertCircle size={18} />
+                      <span className="text-sm font-medium">{reassignFeedback.message}</span>
+                    </div>
+                  )}
+                </Card>
+
+                <Card className="p-6 bg-white shadow-lg border border-gray-200 space-y-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-800">Baixa automatizada</h2>
+                      <p className="text-sm text-gray-600">
+                        As peças lidas saem imediatamente do estoque e têm suas tags liberadas para reutilização.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={clearRetireSession}
+                        variant="secondary"
+                        size="sm"
+                        disabled={retireTags.length === 0}
+                      >
+                        Limpar
+                      </Button>
+                      {retireReading ? (
+                        <Button onClick={stopRetireReading} variant="secondary" size="sm" icon={Square}>
+                          Parar
+                        </Button>
+                      ) : (
+                        <Button onClick={startRetireReading} variant="primary" size="sm" icon={Play}>
+                          Iniciar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-gray-500">Motivo</label>
+                      <select
+                        value={retireReason}
+                        onChange={event => setRetireReason(event.target.value)}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm bg-white"
+                      >
+                        {RETIRE_REASONS.map(reason => (
+                          <option key={reason.value} value={reason.value}>
+                            {reason.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase font-semibold text-gray-500">Observações (opcional)</label>
+                      <input
+                        type="text"
+                        value={retireNotes}
+                        onChange={event => setRetireNotes(event.target.value)}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm"
+                        placeholder="Ex.: Peça perdida pelo cliente"
+                      />
+                    </div>
+                  </div>
+
+                  <input
+                    ref={hiddenRetireInputRef}
+                    type="text"
+                    onKeyDown={handleRetireKeyDown}
+                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                    aria-hidden="true"
+                  />
+
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-semibold text-gray-800">Peças baixadas ({retireTags.length})</h4>
+                    <span className="text-sm text-gray-500">
+                      {retireReading ? 'Lendo tags...' : 'Leitura parada'}
+                    </span>
+                  </div>
+
+                  <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto bg-white p-4">
+                    {retireTags.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-6">
+                        Inicie a leitura e aproxime as tags que serão baixadas.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm font-mono">
+                        {retireTags.map(entry => {
+                          const reasonLabel = RETIRE_REASONS.find(option => option.value === entry.reason)?.label || entry.reason;
+                          return (
+                            <li
+                              key={`${entry.tag}-${entry.reason}`}
+                              className={`px-3 py-2 rounded-lg border flex items-center justify-between gap-4 ${
+                                entry.status === 'success'
+                                  ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                                  : entry.status === 'error'
+                                  ? 'bg-red-50 border-red-100 text-red-700'
+                                  : 'bg-white border-gray-200 text-gray-700'
+                              }`}
+                            >
+                              <div>
+                                <p className="font-semibold">{entry.tag}</p>
+                                <p className="text-xs text-gray-600">{reasonLabel}</p>
+                                {entry.feedback && <p className="text-xs">{entry.feedback}</p>}
+                              </div>
+                              <span className="text-xs font-bold uppercase">
+                                {entry.status === 'success'
+                                  ? 'Baixada'
+                                  : entry.status === 'error'
+                                  ? 'Erro'
+                                  : 'Pendente'}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {retireFeedback && (
+                    <div
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg border ${
+                        retireFeedback.type === 'success'
+                          ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                          : 'bg-red-50 border-red-100 text-red-700'
+                      }`}
+                    >
+                      <AlertCircle size={18} />
+                      <span className="text-sm font-medium">{retireFeedback.message}</span>
+                    </div>
+                  )}
+                </Card>
+              </section>
             )}
           </>
         ) : (
@@ -1168,11 +2362,24 @@ export const RfidOperationsScreen: React.FC<RfidOperationsScreenProps> = ({ onBa
                   ) : (
                     <ul className="space-y-2 font-mono text-sm text-gray-700">
                       {expurgoTags.map((entry, index) => {
-                        const displayTid = entry.tid || entry.tag; // Mostrar TID se disponível, senão mostra a tag
+                        const displayTid = entry.tid || entry.tag;
+                        const statusLabel =
+                          entry.status === 'success' ? 'Registrada' : entry.status === 'error' ? 'Erro' : 'Pendente';
+                        const statusColor =
+                          entry.status === 'success'
+                            ? 'text-emerald-600'
+                            : entry.status === 'error'
+                            ? 'text-red-600'
+                            : 'text-gray-500';
                         return (
                           <li key={`${entry.tag}-${index}`} className="px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold">{displayTid}</span>
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="font-semibold text-gray-800">{displayTid}</p>
+                                {entry.itemName && <p className="text-xs text-gray-600">{entry.itemName}</p>}
+                                {entry.feedback && <p className="text-xs text-gray-500">{entry.feedback}</p>}
+                              </div>
+                              <span className={`text-xs font-semibold uppercase ${statusColor}`}>{statusLabel}</span>
                             </div>
                           </li>
                         );
