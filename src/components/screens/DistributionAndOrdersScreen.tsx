@@ -428,6 +428,12 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     return rfidBedsForSector.slice(start, start + BED_PAGE_SIZE);
   }, [rfidBedsForSector, rfidBedPage]);
 
+useEffect(() => {
+  if (rfidScope === 'bed' && !rfidSelectedBedId && rfidBedsForSector.length > 0) {
+    setRfidSelectedBedId(rfidBedsForSector[0].id);
+  }
+}, [rfidScope, rfidSelectedBedId, rfidBedsForSector]);
+
   const rfidEntriesTotalPages = Math.max(
     1,
     Math.ceil(rfidEntries.length / RFID_ENTRIES_PAGE_SIZE)
