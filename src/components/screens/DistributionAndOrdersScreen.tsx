@@ -658,11 +658,22 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
         );
       }
 
+      // Parar a leitura RFID
+      stopRfidReading();
+      
+      // Mostrar mensagem de sucesso
       setRfidFeedback({
         type: 'success',
-        message: `Distribuição RFID concluída – ${rfidTotalPieces} peça(s) lançada(s).`
+        message: `✅ Distribuição concluída! ${rfidTotalPieces} peça(s) distribuída(s) com sucesso.`
       });
-      setRfidEntries([]);
+      
+      // Limpar a tela após 3 segundos
+      setTimeout(() => {
+        setRfidEntries([]);
+        setRfidFeedback(null);
+        setRfidEntriesPage(0);
+      }, 3000);
+      
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro na distribuição RFID.';
       setRfidFeedback({ type: 'error', message });
@@ -1586,7 +1597,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
                       onClick={handleRfidDistribution}
                       disabled={
                         rfidSubmitting ||
-                        rfidEntries.length === 0 ||
+                        rfidFoundCount === 0 ||
                         (rfidScope === 'bed' && !rfidSelectedBedId) ||
                         (rfidScope === 'sector' && !rfidSectorBed)
                       }
