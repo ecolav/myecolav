@@ -311,8 +311,8 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
           .map(t => ({
             tag: t.tag,
             tid: t.tid,
-            name: 'Não cadastrada',
-            notFound: true
+            name: 'Buscando informações...',
+            notFound: false  // Inicialmente false, será atualizado depois
           }));
         
         if (newEntries.length > 0) {
@@ -801,11 +801,20 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
         // Sucesso - sair do loop
         break;
       } catch (error) {
-        // Se for a última tentativa, manter como "não cadastrada" (já foi adicionada)
+        // Se for a última tentativa, marcar como "não cadastrada"
         if (tagsToTry.indexOf(tagToTry) === tagsToTry.length - 1) {
-          console.log('⚠️ [RFID] Tag não encontrada, mantendo como não cadastrada:', tag);
-          // Tag já foi adicionada como "não cadastrada" no useEffect
-          // Não precisa fazer nada aqui
+          console.log('⚠️ [RFID] Tag não encontrada após todas as tentativas:', tag);
+          
+          // Marcar como não cadastrada
+          setRfidEntries(prev => prev.map(entry => 
+            entry.tag === tag 
+              ? { 
+                  ...entry,
+                  name: 'Não cadastrada',
+                  notFound: true
+                }
+              : entry
+          ));
         }
         // Caso contrário, continuar tentando outras tags
       }
