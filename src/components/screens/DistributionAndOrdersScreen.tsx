@@ -773,6 +773,16 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
         const pieceNumber = data?.pieceNumber || 0;
         const status = data?.status || 'EM_USO';
         const clientName = data?.clientName || data?.client?.name || '';
+        
+        console.log('✅ [RFID] Tag processada com sucesso:', {
+          tag,
+          name,
+          fullNumber,
+          status,
+          clientName,
+          linenItemId,
+          notFound: false
+        });
 
         // Atualizar entrada existente (a tag já foi adicionada como "não cadastrada")
         setRfidEntries(prev => prev.map(entry => 
