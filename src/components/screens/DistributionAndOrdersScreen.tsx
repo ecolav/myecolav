@@ -541,30 +541,33 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
 
   // Contar tags não cadastradas
   const rfidNotFoundCount = useMemo(() => {
-    return rfidEntries.filter(entry => entry.notFound || !entry.linenItemId).length;
+    return rfidEntries.filter(entry => entry.notFound && !entry.fullNumber && !entry.name).length;
   }, [rfidEntries]);
   
   // Contar tags cadastradas
   const rfidFoundCount = useMemo(() => {
-    return rfidEntries.filter(entry => entry.linenItemId && !entry.notFound).length;
+    return rfidEntries.filter(entry => !entry.notFound || entry.fullNumber || entry.name).length;
   }, [rfidEntries]);
   
   const rfidSummary = useMemo(() => {
     const map = new Map<
       string,
-      { linenItemId: string; quantity: number; name: string; sku?: string }
+      { linenItemId: string; quantity: number; name: string; sku?: string; fullNumber?: string }
     >();
-    // Filtrar apenas tags cadastradas (que têm linenItemId)
+    // Filtrar apenas tags cadastradas (que têm fullNumber ou name)
     rfidEntries
-      .filter(entry => entry.linenItemId && !entry.notFound)
+      .filter(entry => !entry.notFound || entry.fullNumber || entry.name)
       .forEach(entry => {
         const catalogItem = items.find(i => i.id === entry.linenItemId);
-        const current = map.get(entry.linenItemId!);
-        map.set(entry.linenItemId!, {
-          linenItemId: entry.linenItemId!,
+        // Usar linenItemId como chave se disponível, senão usar o nome ou fullNumber
+        const key = entry.linenItemId || entry.fullNumber || entry.name || entry.tag;
+        const current = map.get(key);
+        map.set(key, {
+          linenItemId: entry.linenItemId || key,
           quantity: (current?.quantity || 0) + 1,
-          name: entry.name || catalogItem?.name || 'Item RFID',
-          sku: entry.sku || catalogItem?.sku
+          name: entry.name || catalogItem?.name || 'Tag Associada',
+          sku: entry.sku || catalogItem?.sku,
+          fullNumber: entry.fullNumber
         });
       });
     return Array.from(map.values());
@@ -582,7 +585,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
 
   const handleRfidDistribution = async () => {
     // Filtrar apenas tags cadastradas para distribuição
-    const validEntries = rfidEntries.filter(entry => entry.linenItemId && !entry.notFound);
+    const validEntries = rfidEntries.filter(entry => !entry.notFound || entry.fullNumber || entry.name);
     
     if (!selectedSectorId || validEntries.length === 0) {
       if (rfidNotFoundCount > 0) {
