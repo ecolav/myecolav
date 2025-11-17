@@ -632,7 +632,20 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
       const reason = `Distribuição RFID para ${sectorName} - ${bedName}`;
 
       // Usar apenas tags cadastradas (rfidSummary já filtra)
+      console.log('📦 [RFID] rfidSummary:', rfidSummary);
+      console.log('🎯 [RFID] targetBedId:', targetBedId);
+      console.log('📝 [RFID] reason:', reason);
+      
       for (const summary of rfidSummary) {
+        const payload = {
+          linenItemId: summary.linenItemId,
+          bedId: targetBedId,
+          quantity: summary.quantity,
+          reason
+        };
+        
+        console.log('📤 [RFID] Enviando para API /distribute:', payload);
+        
         const response = await fetch(
           `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.DISTRIBUTE}`,
           {
@@ -641,17 +654,18 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
               'Content-Type': 'application/json',
               'x-api-key': API_CONFIG.API_KEY
             },
-            body: JSON.stringify({
-              linenItemId: summary.linenItemId,
-              bedId: targetBedId,
-              quantity: summary.quantity,
-              reason
-            })
+            body: JSON.stringify(payload)
           }
         );
 
         if (!response.ok) {
           const message = await response.text();
+          console.error('❌ [RFID] Erro na distribuição:', {
+            status: response.status,
+            statusText: response.statusText,
+            message,
+            payload
+          });
           throw new Error(message || 'Erro ao distribuir peças RFID.');
         }
 
