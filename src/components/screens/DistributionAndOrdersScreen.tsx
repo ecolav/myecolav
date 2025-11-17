@@ -754,18 +754,13 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
           data?.itemId ||
           null;
 
-        if (!linenItemId) {
-          console.error('❌ [RFID] Resposta da API não contém linenItemId:', data);
-          throw new Error('Resposta da API não contém o código do item.');
-        }
-
-        const catalogItem = items.find(i => i.id === linenItemId);
+        const catalogItem = linenItemId ? items.find(i => i.id === linenItemId) : null;
         const name =
           data?.linenItemName ||
           data?.linenItem?.name ||
           data?.item?.name ||
           catalogItem?.name ||
-          'Item RFID';
+          'Tag Associada';
         const sku =
           data?.linenItemSku ||
           data?.linenItem?.sku ||
