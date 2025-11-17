@@ -559,18 +559,25 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const rfidSummary = useMemo(() => {
     const map = new Map<
       string,
-      { linenItemId: string; quantity: number; name: string; sku?: string; fullNumber?: string }
+      { linenItemId: string | null; quantity: number; name: string; sku?: string; fullNumber?: string }
     >();
     // Filtrar apenas tags cadastradas (que têm fullNumber ou name)
     rfidEntries
       .filter(entry => entry.fullNumber || (entry.name && entry.name !== 'Buscando informações...'))
       .forEach(entry => {
+        console.log('🔍 [RFID] Processing entry for summary:', {
+          tag: entry.tag,
+          linenItemId: entry.linenItemId,
+          fullNumber: entry.fullNumber,
+          name: entry.name
+        });
+        
         const catalogItem = items.find(i => i.id === entry.linenItemId);
         // Usar linenItemId como chave se disponível, senão usar o nome ou fullNumber
         const key = entry.linenItemId || entry.fullNumber || entry.name || entry.tag;
         const current = map.get(key);
         map.set(key, {
-          linenItemId: entry.linenItemId || key,
+          linenItemId: entry.linenItemId || null,  // Não usar fallback - deixar null se não existir
           quantity: (current?.quantity || 0) + 1,
           name: entry.name || catalogItem?.name || 'Tag Associada',
           sku: entry.sku || catalogItem?.sku,
@@ -636,7 +643,24 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
       console.log('🎯 [RFID] targetBedId:', targetBedId);
       console.log('📝 [RFID] reason:', reason);
       
-      for (const summary of rfidSummary) {
+      // Separar itens com e sem linenItemId
+      const itemsWithLinenItemId = rfidSummary.filter(s => s.linenItemId);
+      const itemsWithoutLinenItemId = rfidSummary.filter(s => !s.linenItemId);
+      
+      console.log(`📊 [RFID] ${itemsWithLinenItemId.length} item(s) com linenItemId, ${itemsWithoutLinenItemId.length} sem linenItemId`);
+      
+      // Avisar sobre peças sem linenItemId
+      if (itemsWithoutLinenItemId.length > 0) {
+        console.warn('⚠️ [RFID] Peças RFID sem linenItemId não podem ser distribuídas via API antiga:', itemsWithoutLinenItemId);
+        setRfidFeedback({
+          type: 'error',
+          message: `${itemsWithoutLinenItemId.length} peça(s) RFID não podem ser distribuídas (sem código de item no catálogo). Use a distribuição manual.`
+        });
+        setRfidSubmitting(false);
+        return;
+      }
+      
+      for (const summary of itemsWithLinenItemId) {
         const payload = {
           linenItemId: summary.linenItemId,
           bedId: targetBedId,
