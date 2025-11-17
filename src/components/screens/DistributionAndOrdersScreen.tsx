@@ -544,9 +544,14 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     return rfidEntries.filter(entry => entry.notFound && !entry.fullNumber && !entry.name).length;
   }, [rfidEntries]);
   
-  // Contar tags cadastradas
+  // Contar tags cadastradas (tem informações válidas)
   const rfidFoundCount = useMemo(() => {
-    return rfidEntries.filter(entry => !entry.notFound || entry.fullNumber || entry.name).length;
+    const count = rfidEntries.filter(entry => entry.fullNumber || entry.name).length;
+    console.log('🔢 [RFID] rfidFoundCount:', count, 'Total entries:', rfidEntries.length);
+    rfidEntries.forEach(entry => {
+      console.log('  Tag:', entry.tag, '| name:', entry.name, '| fullNumber:', entry.fullNumber, '| notFound:', entry.notFound);
+    });
+    return count;
   }, [rfidEntries]);
   
   const rfidSummary = useMemo(() => {
