@@ -652,9 +652,16 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
       // Avisar sobre peças sem linenItemId
       if (itemsWithoutLinenItemId.length > 0) {
         console.warn('⚠️ [RFID] Peças RFID sem linenItemId não podem ser distribuídas via API antiga:', itemsWithoutLinenItemId);
+        
+        const pieceList = itemsWithoutLinenItemId
+          .map(item => `${item.name || item.fullNumber || 'Tag desconhecida'} (${item.quantity}x)`)
+          .join(', ');
+        
         setRfidFeedback({
           type: 'error',
-          message: `${itemsWithoutLinenItemId.length} peça(s) RFID não podem ser distribuídas (sem código de item no catálogo). Use a distribuição manual.`
+          message: `❌ Não é possível distribuir estas ${itemsWithoutLinenItemId.length} peça(s): ${pieceList}.\n\n` +
+                   `Motivo: As tags RFID estão registradas mas NÃO estão associadas a nenhum item do catálogo do sistema.\n\n` +
+                   `✅ Solução: Na tela "RFID - Associar/Expurgo", vá em "Associar Tags" e associe estas tags a um lote/item do catálogo antes de distribuir.`
         });
         setRfidSubmitting(false);
         return;
@@ -800,18 +807,31 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
         // Se chegou aqui, encontrou a tag - processar resposta
         const data = await response.json();
         
-        console.log('✅ [RFID] Dados recebidos da API:', {
-          data,
-          tagUsed: tagToTry
+        console.log('✅ [RFID] Dados COMPLETOS recebidos da API:', {
+          dataCompleto: data,
+          tagUsada: tagToTry,
+          camposDisponiveis: Object.keys(data || {})
         });
         
+        // Tentar extrair linenItemId de várias formas possíveis
         const linenItemId =
           data?.linenItemId ||
           data?.linenItem?.id ||
           data?.rfidItem?.linenItemId ||
           data?.item?.linenItemId ||
+          data?.item?.id ||  // Adicionar esta tentativa
           data?.itemId ||
           null;
+
+        console.log('🔍 [RFID] Tentativa de extração do linenItemId:', {
+          'data?.linenItemId': data?.linenItemId,
+          'data?.linenItem?.id': data?.linenItem?.id,
+          'data?.rfidItem?.linenItemId': data?.rfidItem?.linenItemId,
+          'data?.item?.linenItemId': data?.item?.linenItemId,
+          'data?.item?.id': data?.item?.id,
+          'data?.itemId': data?.itemId,
+          'resultado_final': linenItemId
+        });
 
         const catalogItem = linenItemId ? items.find(i => i.id === linenItemId) : null;
         const name =
@@ -840,6 +860,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
           status,
           clientName,
           linenItemId,
+          catalogItem: catalogItem ? { id: catalogItem.id, name: catalogItem.name } : null,
           notFound: false
         });
 
