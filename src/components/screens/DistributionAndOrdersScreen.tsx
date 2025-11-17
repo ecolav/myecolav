@@ -546,7 +546,9 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   
   // Contar tags cadastradas (tem informações válidas)
   const rfidFoundCount = useMemo(() => {
-    const count = rfidEntries.filter(entry => entry.fullNumber || entry.name).length;
+    const count = rfidEntries.filter(entry => 
+      (entry.fullNumber || (entry.name && entry.name !== 'Buscando informações...'))
+    ).length;
     console.log('🔢 [RFID] rfidFoundCount:', count, 'Total entries:', rfidEntries.length);
     rfidEntries.forEach(entry => {
       console.log('  Tag:', entry.tag, '| name:', entry.name, '| fullNumber:', entry.fullNumber, '| notFound:', entry.notFound);
@@ -561,7 +563,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     >();
     // Filtrar apenas tags cadastradas (que têm fullNumber ou name)
     rfidEntries
-      .filter(entry => !entry.notFound || entry.fullNumber || entry.name)
+      .filter(entry => entry.fullNumber || (entry.name && entry.name !== 'Buscando informações...'))
       .forEach(entry => {
         const catalogItem = items.find(i => i.id === entry.linenItemId);
         // Usar linenItemId como chave se disponível, senão usar o nome ou fullNumber
@@ -589,8 +591,8 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   );
 
   const handleRfidDistribution = async () => {
-    // Filtrar apenas tags cadastradas para distribuição
-    const validEntries = rfidEntries.filter(entry => !entry.notFound || entry.fullNumber || entry.name);
+    // Filtrar apenas tags cadastradas para distribuição (excluir "Buscando informações...")
+    const validEntries = rfidEntries.filter(entry => entry.fullNumber || (entry.name && entry.name !== 'Buscando informações...'));
     
     if (!selectedSectorId || validEntries.length === 0) {
       if (rfidNotFoundCount > 0) {
