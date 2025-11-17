@@ -716,13 +716,55 @@ useEffect(() => {
         );
       }
 
+      // Após a chamada da API, consultar novamente cada tag para verificar se o status mudou
+      const postDistributionStatuses: Array<{ tag: string; fullNumber?: string; status?: string | null }> = [];
+      for (const entry of validEntries) {
+        try {
+          const info = await lookupRfidItem(entry.tag);
+          postDistributionStatuses.push({
+            tag: entry.tag,
+            fullNumber: info?.fullNumber || entry.fullNumber || entry.tag,
+            status: info?.status || null
+          });
+        } catch (verifyError) {
+          console.warn('⚠️ [RFID] Falha ao verificar status após distribuir tag:', {
+            tag: entry.tag,
+            error: verifyError
+          });
+          postDistributionStatuses.push({
+            tag: entry.tag,
+            fullNumber: entry.fullNumber || entry.tag,
+            status: null
+          });
+        }
+      }
+
+      console.log('🔁 [RFID] Status das tags após POST /distribute:', postDistributionStatuses);
+
+      const tagsWithoutDistributedStatus = postDistributionStatuses.filter(result => {
+        if (!result.status) return true;
+        const normalized = result.status.toUpperCase();
+        return !normalized.includes('DISTRIB') && !normalized.includes('ENTREG');
+      });
+
+      if (tagsWithoutDistributedStatus.length > 0) {
+        console.warn('⚠️ [RFID] API não retornou status DISTRIBUIDO para todas as tags:', tagsWithoutDistributedStatus);
+      }
+
       // Parar a leitura RFID
       stopRfidReading();
       
       // Mostrar mensagem de sucesso
       setRfidFeedback({
         type: 'success',
-        message: `✅ Distribuição concluída! ${rfidTotalPieces} peça(s) distribuída(s) com sucesso.`
+        message: `✅ Distribuição concluída! ${rfidTotalPieces} peça(s) distribuída(s) com sucesso.` +
+          (tagsWithoutDistributedStatus.length > 0
+            ? `\n\n⚠️ Observação: ao consultar novamente /rfid/lookup, ${tagsWithoutDistributedStatus.length} tag(s) ainda aparecem com status ` +
+              `"${tagsWithoutDistributedStatus[0].status || 'indefinido'}". O endpoint /api/public/totem/distribute aceita apenas ` +
+              `linenItemId e não recebe o TID/EPC, portanto o backend ainda não consegue marcar automaticamente cada tag como "Distribuída". ` +
+              `Consulte os logs do console para ver a lista completa de tags que continuam sem o status atualizado e alinhe com a equipe de backend ` +
+              `sobre o endpoint RFID específico que registrará o movimento da tag.`
+            : '')
       });
       
       // Limpar a tela após 3 segundos
