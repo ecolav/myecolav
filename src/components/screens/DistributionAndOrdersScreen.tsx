@@ -5,6 +5,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useSectors } from '../../hooks/useSectors';
 import { useRequests } from '../../hooks/useRequests';
 import { useRFIDReader } from '../../hooks/useRFIDReader';
+import { useRfidItem } from '../../hooks/useRfidItem';
 import { API_CONFIG } from '../../config/api';
 
 interface Props {
@@ -65,7 +66,19 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const [rfidScope, setRfidScope] = useState<'bed' | 'sector'>('bed');
   const [rfidSelectedBedId, setRfidSelectedBedId] = useState('');
   const [rfidEntries, setRfidEntries] = useState<
-    Array<{ tag: string; tid?: string; linenItemId?: string; name: string; sku?: string; notFound?: boolean }>
+    Array<{ 
+      tag: string; 
+      tid?: string; 
+      linenItemId?: string; 
+      name: string; 
+      sku?: string; 
+      notFound?: boolean;
+      fullNumber?: string;
+      batchNumber?: number;
+      pieceNumber?: number;
+      status?: string;
+      clientName?: string;
+    }>
   >([]);
   const [rfidFeedback, setRfidFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rfidSubmitting, setRfidSubmitting] = useState(false);
@@ -77,6 +90,9 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const hiddenRfidInputRef = useRef<HTMLInputElement>(null);
   const processedTagsRef = useRef<Set<string>>(new Set());
   const lastProcessedReadingIdRef = useRef<number>(0);
+  
+  // Hook para consultar tags RFID no servidor
+  const { lookupTag: lookupRfidItem } = useRfidItem();
 
   const BED_PAGE_SIZE = 4;
   const RFID_ENTRIES_PAGE_SIZE = 8;
@@ -755,11 +771,30 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
           data?.linenItem?.sku ||
           data?.item?.sku ||
           catalogItem?.sku;
+        
+        // Extrair informações adicionais da peça
+        const fullNumber = data?.fullNumber || data?.pieceNumber || '';
+        const batchNumber = data?.batchNumber || 0;
+        const pieceNumber = data?.pieceNumber || 0;
+        const status = data?.status || 'EM_USO';
+        const clientName = data?.clientName || data?.client?.name || '';
 
         // Atualizar entrada existente (a tag já foi adicionada como "não cadastrada")
         setRfidEntries(prev => prev.map(entry => 
           entry.tag === tag 
-            ? { tag, tid: entry.tid, linenItemId, name, sku, notFound: false }
+            ? { 
+                tag, 
+                tid: entry.tid, 
+                linenItemId, 
+                name, 
+                sku, 
+                notFound: false,
+                fullNumber,
+                batchNumber,
+                pieceNumber,
+                status,
+                clientName
+              }
             : entry
         ));
         
@@ -1401,9 +1436,31 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
                                     )}
                                   </div>
                                   {!isNotFound && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      {entry.name}
-                                    </p>
+                                    <div className="mt-1 space-y-0.5">
+                                      <p className="text-xs font-semibold text-gray-700">
+                                        {entry.name}
+                                      </p>
+                                      {entry.fullNumber && (
+                                        <p className="text-xs text-gray-500">
+                                          Peça: {entry.fullNumber}
+                                        </p>
+                                      )}
+                                      {entry.clientName && (
+                                        <p className="text-xs text-gray-500">
+                                          Cliente: {entry.clientName}
+                                        </p>
+                                      )}
+                                      {entry.status && (
+                                        <p className={`text-xs font-medium ${
+                                          entry.status === 'EM_USO' ? 'text-green-600' :
+                                          entry.status === 'DISTRIBUIDO' ? 'text-blue-600' :
+                                          entry.status === 'EXPURGO' ? 'text-orange-600' :
+                                          'text-gray-600'
+                                        }`}>
+                                          Status: {entry.status.replace(/_/g, ' ')}
+                                        </p>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                                 <button

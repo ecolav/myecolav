@@ -16,6 +16,7 @@ import { Card } from '../ui/Card';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
 import { useRFIDReader } from '../../hooks/useRFIDReader';
+import { useRfidItem } from '../../hooks/useRfidItem';
 import { API_CONFIG } from '../../config/api';
 
 interface RfidOperationsScreenProps {
@@ -35,11 +36,17 @@ interface PendingBatch {
 
 interface ExpurgoEntry {
   id: string;
+  tag: string;
   fullNumber?: string;
   itemName?: string;
   createdAt?: string;
   linenItemName?: string;
   sectorName?: string;
+  status?: string;
+  clientName?: string;
+  batchNumber?: number;
+  pieceNumber?: number;
+  sku?: string;
 }
 
 interface AssociationResult {
@@ -55,6 +62,12 @@ interface SessionExpurgoTag {
   itemName?: string;
   status: 'pending' | 'success' | 'error';
   feedback?: string;
+  fullNumber?: string;
+  batchNumber?: number;
+  pieceNumber?: number;
+  rfidStatus?: string;
+  clientName?: string;
+  sku?: string;
 }
 
 type CleanTab = 'association' | 'nonconformity' | 'maintenance';
@@ -129,6 +142,7 @@ const [selectedBatch, setSelectedBatch] = useState<PendingBatch | null>(null);
 const [showAssociationModal, setShowAssociationModal] = useState(false);
 const [tagDraft, setTagDraft] = useState('');
 const [scannedTags, setScannedTags] = useState<string[]>([]);
+const [scannedTagsInfo, setScannedTagsInfo] = useState<Map<string, any>>(new Map());
 const [associationResults, setAssociationResults] = useState<AssociationResult[]>([]);
 const [readingActive, setReadingActive] = useState(false);
 const [associationFeedback, setAssociationFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -314,6 +328,7 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
           ?? entry.tag 
           ?? entry.rfidTag 
           ?? entry.rfidNumber
+          ?? entry.rfidTagUid
           ?? entry.tid
           ?? entry.epc
           ?? entry.number
@@ -327,11 +342,17 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
         
         return {
           id: String(entry.id ?? entry.rfidItemId ?? entry.rfidItem?.id ?? index),
+          tag: tagValue,
           fullNumber: tagValue,
           itemName: entry.item?.name ?? entry.linenItem?.name ?? entry.linenItemName ?? entry.itemName,
+          sku: entry.item?.sku ?? entry.linenItem?.sku ?? entry.sku,
           createdAt: entry.createdAt ?? entry.allocatedAt ?? entry.registeredAt,
           linenItemName: entry.linenItem?.name ?? entry.item?.name ?? entry.linenItemName,
-          sectorName: entry.bed?.sector?.name ?? entry.sector?.name ?? entry.sectorName
+          sectorName: entry.bed?.sector?.name ?? entry.sector?.name ?? entry.sectorName,
+          status: entry.status ?? 'EXPURGO',
+          clientName: entry.client?.name ?? entry.clientName,
+          batchNumber: entry.batchNumber,
+          pieceNumber: entry.pieceNumber
         };
       });
       
@@ -493,7 +514,8 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
     // Comentário: ao abrir o modal, limpamos estados de leitura anteriores.
     setSelectedBatch(batch);
     setScannedTags([]);
-  setAssociationResults([]);
+    setScannedTagsInfo(new Map());
+    setAssociationResults([]);
     setTagDraft('');
     setReadingActive(false);
     setAssociationFeedback(null);
@@ -505,7 +527,7 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
     return Math.max((selectedBatch.quantity ?? 0) - (selectedBatch.associatedTags ?? 0), 0);
   }, [selectedBatch]);
 
-  const handleTagCapture = useCallback((rawValue: string) => {
+  const handleTagCapture = useCallback(async (rawValue: string) => {
     const trimmed = rawValue.trim();
     if (!trimmed) return;
 
@@ -513,6 +535,32 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
     const normalized = trimmed.replace(/\s+/g, '').toUpperCase();
 
     setAssociationResults(prev => prev.filter(entry => entry.tag !== normalized));
+
+    // Buscar informações da tag via API
+    let tagInfo: any = null;
+    try {
+      const lookupUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_LOOKUP}?tag=${encodeURIComponent(normalized)}`;
+      const lookupResponse = await fetch(lookupUrl, {
+        headers: {
+          'x-api-key': API_CONFIG.API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (lookupResponse.ok) {
+        tagInfo = await lookupResponse.json();
+        console.log(`🔍 [Associação] Informações da tag ${normalized}:`, tagInfo);
+        
+        // Armazenar informações da tag
+        setScannedTagsInfo(prev => {
+          const newMap = new Map(prev);
+          newMap.set(normalized, tagInfo);
+          return newMap;
+        });
+      }
+    } catch (error) {
+      console.warn(`⚠️ [Associação] Não foi possível buscar informações da tag ${normalized}:`, error);
+    }
 
     setScannedTags(prev => {
       if (prev.includes(normalized)) {
@@ -542,6 +590,11 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
 
   const removeScannedTag = useCallback((tag: string) => {
     setScannedTags(prev => prev.filter(item => item !== tag));
+    setScannedTagsInfo(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(tag);
+      return newMap;
+    });
     setAssociationResults(prev => prev.filter(entry => entry.tag !== tag));
   }, []);
 
@@ -1328,6 +1381,25 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
       return;
     }
 
+    // Buscar informações da tag antes de adicionar
+    let tagInfo: any = null;
+    try {
+      const lookupUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_LOOKUP}?tag=${encodeURIComponent(normalized)}`;
+      const lookupResponse = await fetch(lookupUrl, {
+        headers: {
+          'x-api-key': API_CONFIG.API_KEY,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (lookupResponse.ok) {
+        tagInfo = await lookupResponse.json();
+        console.log(`🔍 [Expurgo] Informações da tag ${normalized}:`, tagInfo);
+      }
+    } catch (error) {
+      console.warn(`⚠️ [Expurgo] Não foi possível buscar informações da tag ${normalized}:`, error);
+    }
+
     setExpurgoTags(prev => {
       if (prev.some(entry => entry.tag === normalized)) return prev;
       return [
@@ -1335,7 +1407,14 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
         {
           tag: normalized,
           tid: normalizedTid || undefined,
-          status: 'pending' as const
+          status: 'pending' as const,
+          fullNumber: tagInfo?.fullNumber || tagInfo?.pieceNumber,
+          itemName: tagInfo?.linenItemName || tagInfo?.item?.name,
+          sku: tagInfo?.item?.sku || tagInfo?.linenItemSku,
+          rfidStatus: tagInfo?.status,
+          clientName: tagInfo?.clientName || tagInfo?.client?.name,
+          batchNumber: tagInfo?.batchNumber,
+          pieceNumber: tagInfo?.pieceNumber
         }
       ];
     });
@@ -1751,16 +1830,46 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                           {scannedTags.map(tag => {
                             const tagResult = associationResults.find(result => result.tag === tag);
+                            const tagInfo = scannedTagsInfo.get(tag);
                             return (
                               <div
                                 key={tag}
                                 className="flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
                               >
-                                <div className="flex flex-col">
+                                <div className="flex flex-col flex-1">
                                   <span className="font-mono text-blue-800 font-semibold">{tag}</span>
+                                  {tagInfo && (
+                                    <div className="mt-1 space-y-0.5">
+                                      {tagInfo.linenItemName && (
+                                        <p className="text-xs text-gray-600">
+                                          Item: {tagInfo.linenItemName}
+                                        </p>
+                                      )}
+                                      {tagInfo.fullNumber && (
+                                        <p className="text-xs text-gray-600">
+                                          Peça: {tagInfo.fullNumber}
+                                        </p>
+                                      )}
+                                      {tagInfo.clientName && (
+                                        <p className="text-xs text-gray-600">
+                                          Cliente: {tagInfo.clientName}
+                                        </p>
+                                      )}
+                                      {tagInfo.status && (
+                                        <p className={`text-xs font-medium ${
+                                          tagInfo.status === 'EM_USO' ? 'text-green-600' :
+                                          tagInfo.status === 'DISTRIBUIDO' ? 'text-blue-600' :
+                                          tagInfo.status === 'EXPURGO' ? 'text-orange-600' :
+                                          'text-gray-600'
+                                        }`}>
+                                          Status: {tagInfo.status.replace(/_/g, ' ')}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
                                   {tagResult?.message && (
                                     <span
-                                      className={`text-xs ${
+                                      className={`text-xs mt-1 ${
                                         tagResult.status === 'error' ? 'text-red-600' : 'text-emerald-600'
                                       }`}
                                     >
@@ -1769,7 +1878,7 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                                   )}
                                 </div>
                                 <button
-                                  className="text-xs text-red-600 hover:text-red-800"
+                                  className="text-xs text-red-600 hover:text-red-800 ml-2"
                                   onClick={() => removeScannedTag(tag)}
                                 >
                                   remover
@@ -2374,10 +2483,26 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                         return (
                           <li key={`${entry.tag}-${index}`} className="px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
                             <div className="flex items-center justify-between gap-4">
-                              <div>
+                              <div className="flex-1">
                                 <p className="font-semibold text-gray-800">{displayTid}</p>
-                                {entry.itemName && <p className="text-xs text-gray-600">{entry.itemName}</p>}
-                                {entry.feedback && <p className="text-xs text-gray-500">{entry.feedback}</p>}
+                                {entry.itemName && <p className="text-xs text-gray-600 mt-0.5">{entry.itemName}</p>}
+                                {entry.fullNumber && (
+                                  <p className="text-xs text-gray-500 mt-0.5">Peça: {entry.fullNumber}</p>
+                                )}
+                                {entry.clientName && (
+                                  <p className="text-xs text-gray-500 mt-0.5">Cliente: {entry.clientName}</p>
+                                )}
+                                {entry.rfidStatus && (
+                                  <p className={`text-xs font-medium mt-0.5 ${
+                                    entry.rfidStatus === 'EM_USO' ? 'text-green-600' :
+                                    entry.rfidStatus === 'DISTRIBUIDO' ? 'text-blue-600' :
+                                    entry.rfidStatus === 'EXPURGO' ? 'text-orange-600' :
+                                    'text-gray-600'
+                                  }`}>
+                                    Status: {entry.rfidStatus.replace(/_/g, ' ')}
+                                  </p>
+                                )}
+                                {entry.feedback && <p className="text-xs text-gray-500 mt-0.5">{entry.feedback}</p>}
                               </div>
                               <span className={`text-xs font-semibold uppercase ${statusColor}`}>{statusLabel}</span>
                             </div>
