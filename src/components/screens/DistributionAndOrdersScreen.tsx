@@ -784,10 +784,11 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
           notFound: false
         });
 
-        // Atualizar entrada existente (a tag já foi adicionada como "não cadastrada")
+        // Atualizar entrada existente (a tag já foi adicionada como "Buscando informações...")
         setRfidEntries(prev => prev.map(entry => 
           entry.tag === tag 
             ? { 
+                ...entry,
                 tag, 
                 tid: entry.tid, 
                 linenItemId, 
@@ -1425,7 +1426,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
                           <div className="max-h-[420px] overflow-y-auto pr-1">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                               {rfidEntriesPageItems.map(entry => {
-                            const isNotFound = entry.notFound || !entry.linenItemId;
+                            const isNotFound = entry.notFound && !entry.fullNumber && !entry.name;
                             const displayTid = entry.tid || entry.tag; // Mostrar TID se disponível, senão mostra a tag
                             return (
                               <div
