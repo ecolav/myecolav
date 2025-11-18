@@ -5,6 +5,7 @@ import { WeighingScreen } from './components/screens/WeighingScreen';
 import { DistributionAndOrdersScreen } from './components/screens/DistributionAndOrdersScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { RfidOperationsScreen } from './components/screens/RfidOperationsScreen';
+import { ReceptionScreen } from './components/screens/ReceptionScreen';
 import { User } from './types';
 
 function App() {
@@ -38,6 +39,8 @@ function App() {
       
       case 'rfid-operations':
         return <RfidOperationsScreen onBack={goBack} />;
+      case 'reception':
+        return <ReceptionScreen onBack={goBack} />;
       
       case 'reports':
         return (

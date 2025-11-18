@@ -12,7 +12,8 @@ import {
   WifiOff,
   Activity,
   Package,
-  ShoppingCart
+  ShoppingCart,
+  RefreshCcw
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -59,6 +60,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         stats: 'Gestão unificada'
       },
       {
+        id: 'reception',
+        title: 'Recepção RFID',
+        icon: RefreshCcw,
+        gradient: 'from-emerald-500 to-teal-600',
+        description: 'Registrar retorno da lavanderia com leitura automática',
+        stats: 'Fluxo limpo'
+      },
+      {
         id: 'rfid-operations',
         title: isClean ? 'Associação RFID' : 'Expurgo RFID',
         icon: Activity,
@@ -87,7 +96,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     } else {
       // Totem de área limpa - pesagem, distribuição & pedidos, associação RFID e configurações
       return allTiles.filter(tile => 
-        ['weighing', 'distribution-orders', 'rfid-operations', 'settings'].includes(tile.id)
+        ['weighing', 'distribution-orders', 'reception', 'rfid-operations', 'settings'].includes(tile.id)
       );
     }
   };

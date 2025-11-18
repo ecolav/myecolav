@@ -25,6 +25,10 @@ export const API_CONFIG = {
       RFID_DETACH_TAG: '/api/public/totem/rfid/detach-tag',
       RFID_NONCONFORMITY: '/api/public/totem/rfid/nonconformity',
       RFID_RETIRE: '/api/public/totem/rfid/retire',
+      RFID_DISTRIBUTE: '/api/public/totem/rfid/distribute',
+      STOCK_MOVEMENTS: '/api/public/totem/stock-movements',
+      LAUNDRY_EXPORT: '/api/public/totem/laundry/export',
+      RFID_RECEPTION: '/api/public/totem/rfid/reception',
       LAUNDRY_EXPURGO_QUEUE: '/api/public/totem/laundry/expurgo',
       LAUNDRY_EXPURGO_READ: '/api/public/totem/laundry/expurgo/read',
       LAUNDRY_COMPARATIVE: '/api/public/totem/laundry/comparative'
