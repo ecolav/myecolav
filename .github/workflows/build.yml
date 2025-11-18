@@ -1,31 +1,64 @@
-name: Build Ubuntu
+name: Build Tauri Bundles
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest, macos-13]
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      
-      - uses: dtolnay/rust-toolchain@stable
-      
-      - name: Install deps
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev build-essential curl wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      
-      - run: npm install
-      - run: npm run build
-      - run: npm run tauri:build -- --bundles deb
-      
-      - uses: actions/upload-artifact@v4
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri bundle (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: npm run tauri:build -- --bundles deb
+
+      - name: Build Tauri bundle (Windows & macOS)
+        if: matrix.platform != 'ubuntu-22.04'
+        run: npm run tauri:build
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-deb
-          path: src-tauri/target/release/bundle/deb/*.deb
+          name: tauri-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/**
