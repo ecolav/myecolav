@@ -5,7 +5,6 @@ import { useSettings } from '../../hooks/useSettings';
 import { useSectors } from '../../hooks/useSectors';
 import { useRequests } from '../../hooks/useRequests';
 import { useRFIDReader } from '../../hooks/useRFIDReader';
-import { useRfidItem } from '../../hooks/useRfidItem';
 import { API_CONFIG } from '../../config/api';
 
 interface Props {
@@ -69,6 +68,7 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
     Array<{ 
       tag: string; 
       tid?: string; 
+      rfidItemId?: string;
       linenItemId?: string; 
       name: string; 
       sku?: string; 
@@ -91,9 +91,6 @@ export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const processedTagsRef = useRef<Set<string>>(new Set());
   const lastProcessedReadingIdRef = useRef<number>(0);
   
-  // Hook para consultar tags RFID no servidor
-  const { lookupTag: lookupRfidItem } = useRfidItem();
-
   const BED_PAGE_SIZE = 4;
   const RFID_ENTRIES_PAGE_SIZE = 8;
 
@@ -604,18 +601,16 @@ useEffect(() => {
   );
 
   const handleRfidDistribution = async () => {
-    // Filtrar apenas tags cadastradas para distribuição (excluir "Buscando informações...")
-    const validEntries = rfidEntries.filter(entry => entry.fullNumber || (entry.name && entry.name !== 'Buscando informações...'));
-    
+    // Considerar apenas tags válidas (lookup concluído e com ID específico)
+    const validEntries = rfidEntries.filter(
+      entry => !!entry.fullNumber && !!entry.rfidItemId && !entry.notFound
+    );
+
     if (!selectedSectorId || validEntries.length === 0) {
-      if (rfidNotFoundCount > 0) {
-        setRfidFeedback({ 
-          type: 'error', 
-          message: `Nenhuma peça cadastrada para distribuir. ${rfidNotFoundCount} tag(s) não cadastrada(s) foram ignoradas.` 
-        });
-      } else {
-        setRfidFeedback({ type: 'error', message: 'Nenhuma peça RFID informada.' });
-      }
+      setRfidFeedback({
+        type: 'error',
+        message: 'Nenhuma peça RFID cadastrada para distribuir.'
+      });
       return;
     }
 
@@ -638,142 +633,57 @@ useEffect(() => {
     stopRfidReading();
     setRfidSubmitting(true);
     setRfidFeedback(null);
+
     try {
       const sectorName = getSectorName(selectedSectorId);
       const bedName =
         rfidScope === 'sector' ? 'Sem leito (Setor)' : getBedName(targetBedId);
       const reason = `Distribuição RFID para ${sectorName} - ${bedName}`;
 
-      // Usar apenas tags cadastradas (rfidSummary já filtra)
-      console.log('📦 [RFID] rfidSummary:', rfidSummary);
+      const rfidItemIds = validEntries
+        .map(entry => entry.rfidItemId)
+        .filter((id): id is string => Boolean(id));
+
+      console.log('📦 [RFID] rfidItemIds para distribuir:', rfidItemIds);
       console.log('🎯 [RFID] targetBedId:', targetBedId);
-      console.log('📝 [RFID] reason:', reason);
-      
-      // Separar itens com e sem linenItemId
-      const itemsWithLinenItemId = rfidSummary.filter(s => s.linenItemId);
-      const itemsWithoutLinenItemId = rfidSummary.filter(s => !s.linenItemId);
-      
-      console.log(`📊 [RFID] ${itemsWithLinenItemId.length} item(s) com linenItemId, ${itemsWithoutLinenItemId.length} sem linenItemId`);
-      
-      // Avisar sobre peças sem linenItemId
-      if (itemsWithoutLinenItemId.length > 0) {
-        console.warn('⚠️ [RFID] Peças RFID sem linenItemId não podem ser distribuídas via API antiga:', itemsWithoutLinenItemId);
-        
-        const pieceList = itemsWithoutLinenItemId
-          .map(item => `${item.name || item.fullNumber || 'Tag desconhecida'} (${item.quantity}x)`)
-          .join(', ');
-        
-        setRfidFeedback({
-          type: 'error',
-          message: `❌ Não é possível distribuir estas ${itemsWithoutLinenItemId.length} peça(s): ${pieceList}.\n\n` +
-                   `Motivo: As tags RFID estão registradas mas NÃO estão associadas a nenhum item do catálogo do sistema.\n\n` +
-                   `✅ Solução: Na tela "RFID - Associar/Expurgo", vá em "Associar Tags" e associe estas tags a um lote/item do catálogo antes de distribuir.`
-        });
-        setRfidSubmitting(false);
-        return;
-      }
-      
-      for (const summary of itemsWithLinenItemId) {
-        const payload = {
-          linenItemId: summary.linenItemId,
-          bedId: targetBedId,
-          quantity: summary.quantity,
-          reason
-        };
-        
-        console.log('📤 [RFID] Enviando para API /distribute:', payload);
-        
-        const response = await fetch(
-          `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.DISTRIBUTE}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': API_CONFIG.API_KEY
-            },
-            body: JSON.stringify(payload)
-          }
-        );
+      console.log('🏥 [RFID] sectorId:', selectedSectorId);
 
-        if (!response.ok) {
-          const message = await response.text();
-          console.error('❌ [RFID] Erro na distribuição:', {
-            status: response.status,
-            statusText: response.statusText,
-            message,
-            payload
-          });
-          throw new Error(message || 'Erro ao distribuir peças RFID.');
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOTEM.RFID_DISTRIBUTE}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_CONFIG.API_KEY
+          },
+          body: JSON.stringify({
+            rfidItemIds,
+            sectorId: selectedSectorId,
+            bedId: targetBedId,
+            notes: reason
+          })
         }
+      );
 
-        const json = await response.json();
-        setItems(prev =>
-          prev.map(item =>
-            item.id === summary.linenItemId
-              ? { ...item, currentStock: json.newStock ?? item.currentStock }
-              : item
-          )
-        );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('❌ [RFID] Erro na distribuição:', errorData);
+        throw new Error(errorData?.error || 'Erro ao distribuir peças RFID.');
       }
 
-      // Após a chamada da API, consultar novamente cada tag para verificar se o status mudou
-      const postDistributionStatuses: Array<{ tag: string; fullNumber?: string; status?: string | null }> = [];
-      for (const entry of validEntries) {
-        try {
-          const info = await lookupRfidItem(entry.tag);
-          postDistributionStatuses.push({
-            tag: entry.tag,
-            fullNumber: info?.fullNumber || entry.fullNumber || entry.tag,
-            status: info?.status || null
-          });
-        } catch (verifyError) {
-          console.warn('⚠️ [RFID] Falha ao verificar status após distribuir tag:', {
-            tag: entry.tag,
-            error: verifyError
-          });
-          postDistributionStatuses.push({
-            tag: entry.tag,
-            fullNumber: entry.fullNumber || entry.tag,
-            status: null
-          });
-        }
-      }
+      const result = await response.json().catch(() => ({}));
+      console.log('✅ [RFID] Distribuição concluída:', result);
 
-      console.log('🔁 [RFID] Status das tags após POST /distribute:', postDistributionStatuses);
-
-      const tagsWithoutDistributedStatus = postDistributionStatuses.filter(result => {
-        if (!result.status) return true;
-        const normalized = result.status.toUpperCase();
-        return !normalized.includes('DISTRIB') && !normalized.includes('ENTREG');
-      });
-
-      if (tagsWithoutDistributedStatus.length > 0) {
-        console.warn('⚠️ [RFID] API não retornou status DISTRIBUIDO para todas as tags:', tagsWithoutDistributedStatus);
-      }
-
-      // Parar a leitura RFID
-      stopRfidReading();
-      
-      // Mostrar mensagem de sucesso
       setRfidFeedback({
         type: 'success',
-        message: `✅ Distribuição concluída! ${rfidTotalPieces} peça(s) distribuída(s) com sucesso.` +
-          (tagsWithoutDistributedStatus.length > 0
-            ? `\n\n⚠️ Observação: ao consultar novamente /rfid/lookup, ${tagsWithoutDistributedStatus.length} tag(s) ainda aparecem com status ` +
-              `"${tagsWithoutDistributedStatus[0].status || 'indefinido'}". O endpoint /api/public/totem/distribute aceita apenas ` +
-              `linenItemId e não recebe o TID/EPC, portanto o backend ainda não consegue marcar automaticamente cada tag como "Distribuída". ` +
-              `Consulte os logs do console para ver a lista completa de tags que continuam sem o status atualizado e alinhe com a equipe de backend ` +
-              `sobre o endpoint RFID específico que registrará o movimento da tag.`
-            : '')
+        message: `✅ ${result?.distributedCount ?? rfidItemIds.length} peça(s) RFID distribuída(s) com sucesso para ${sectorName}!`
       });
-      
-      // Limpar a tela após 3 segundos
+
       setTimeout(() => {
         setRfidEntries([]);
         setRfidFeedback(null);
         setRfidEntriesPage(0);
       }, 3000);
-      
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro na distribuição RFID.';
       setRfidFeedback({ type: 'error', message });
@@ -871,6 +781,13 @@ useEffect(() => {
           data?.itemId ||
           null;
 
+        const rfidItemId =
+          data?.id ||
+          data?.rfidItem?.id ||
+          data?.rfidItemId ||
+          data?.piece?.id ||
+          null;
+
         console.log('🔍 [RFID] Tentativa de extração do linenItemId:', {
           'data?.linenItemId': data?.linenItemId,
           'data?.linenItem?.id': data?.linenItem?.id,
@@ -919,6 +836,7 @@ useEffect(() => {
                 ...entry,
                 tag, 
                 tid: entry.tid, 
+                rfidItemId: rfidItemId || entry.rfidItemId,
                 linenItemId, 
                 name, 
                 sku, 
