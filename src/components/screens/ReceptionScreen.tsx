@@ -509,10 +509,10 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
       </main>
 
       {showModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center px-3 sm:px-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal}></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b flex items-center justify-between">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="p-4 md:p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-2xl font-semibold text-gray-800">Leitura RFID · Recepção</h3>
                 <p className="text-sm text-gray-500">
@@ -524,8 +524,8 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
               </Button>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="p-4 md:p-5 space-y-4 overflow-y-auto">
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-semibold ${
                     readerStatus.isConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'
@@ -546,7 +546,7 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {!rfidReadingActive ? (
                     <Button onClick={startReceptionReading} icon={Radio}>
                       Iniciar leitura
@@ -589,7 +589,7 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
                     Entradas registradas: <strong>{dailyEntriesCount}</strong>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -598,6 +598,9 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
                   >
                     {exporting ? 'Exportando...' : 'Exportar expurgo'}
                   </Button>
+                  <span className="text-xs text-gray-500">
+                    Dados de {new Date(selectedDate).toLocaleDateString()}
+                  </span>
                 </div>
               </div>
 
@@ -650,7 +653,7 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
               )}
             </div>
 
-            <div className="p-5 border-t flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center sm:justify-between">
+            <div className="p-4 md:p-5 border-t flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center sm:justify-between">
               <div className="text-sm text-gray-500">
                 {validEntries.length} peça(s) pronta(s) para recepção
               </div>

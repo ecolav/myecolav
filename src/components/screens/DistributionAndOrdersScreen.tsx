@@ -1082,8 +1082,8 @@ useEffect(() => {
 
             {/* Modal de Distribuição Manual */}
             {showManualModal && (
-              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-                <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-3 sm:px-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto p-4 md:p-6 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-gray-800">
@@ -1098,8 +1098,8 @@ useEffect(() => {
                     </Button>
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 p-4 space-y-4">
-                    <div className="flex flex-wrap gap-4 items-center">
+                    <div className="rounded-xl border border-gray-200 p-3 md:p-4 space-y-4">
+                    <div className="flex flex-wrap gap-3 items-center text-sm">
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
                           type="radio"
@@ -1135,7 +1135,7 @@ useEffect(() => {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {manualBedsPageItems.map(bed => (
                               <button
                                 key={bed.id}
@@ -1311,8 +1311,8 @@ useEffect(() => {
 
             {/* Modal de Distribuição RFID */}
             {showRfidModal && (
-              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-                <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-3 sm:px-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto p-4 md:p-6 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-gray-800">
@@ -1327,8 +1327,8 @@ useEffect(() => {
                     </Button>
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 p-4 space-y-4">
-                    <div className="flex flex-wrap gap-4 items-center">
+                  <div className="rounded-xl border border-gray-200 p-3 md:p-4 space-y-4">
+                    <div className="flex flex-wrap gap-3 items-center text-sm">
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
                           type="radio"
@@ -1364,7 +1364,7 @@ useEffect(() => {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {rfidBedsPageItems.map(bed => (
                               <button
                                 key={bed.id}

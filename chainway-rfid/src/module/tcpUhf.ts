@@ -22,6 +22,10 @@ class TCPClient {
     send(message: Buffer): Promise<void> {
         return new Promise((resolve, reject) => {
             if (this.client) {
+                if (this.client.destroyed) {
+                    console.error('Send error: client socket already destroyed');
+                    return reject(new Error('Client socket destroyed'));
+                }
                 this.client.write(message, (err: Error | null | undefined) => {
                     if (err) {
                         console.error('Send error:', err.message);
