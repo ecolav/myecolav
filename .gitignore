@@ -44,3 +44,6 @@ PROBLEMA_*.txt
 criar-release.sh
 release-*/
 *.tar.gz
+# ignore SSH keys
+eu
+eu.pub
