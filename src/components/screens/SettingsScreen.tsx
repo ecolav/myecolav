@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   ArrowLeft, Settings as SettingsIcon, Scale, Printer, Radio, 
   Server, Wifi, Search, RefreshCw, AlertCircle, 
@@ -9,6 +9,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
 import { SCALE_DRIVERS, getDriverByLabel } from '../../utils/scaleDrivers';
 import { listSerialPorts, requestSerialPortPermission, listUsbDevices, requestUsbDevicePermission } from '../../utils/ports';
+import { useRFIDReader } from '../../hooks/useRFIDReader';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -20,6 +21,7 @@ type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const { settings, setSettings } = useSettings();
   const { clients, loading: clientsLoading, selectedClient, setSelectedClient } = useClients();
+  const { powerStatus } = useRFIDReader();
   
   const [tab, setTab] = useState<Tab>('totem');
   const [status, setStatus] = useState<Record<string, ConnectionStatus>>({});
@@ -28,6 +30,61 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   const [rfidModalOpen, setRfidModalOpen] = useState(false);
   const [testingUr4, setTestingUr4] = useState(false);
   const [rfidFeedback, setRfidFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  const powerUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPowerValueRef = useRef(settings.rfid.chainwayUr4.power);
+
+  useEffect(() => {
+    pendingPowerValueRef.current = settings.rfid.chainwayUr4.power;
+  }, [settings.rfid.chainwayUr4.power]);
+
+  useEffect(() => {
+    return () => {
+      if (powerUpdateTimeoutRef.current) {
+        clearTimeout(powerUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const sendUr4ConfigUpdate = (partial: {
+    host?: string;
+    port?: number;
+    power?: number;
+    antennas?: number[];
+  }, base?: typeof settings.rfid.chainwayUr4) => {
+    const reference = base ?? settings.rfid.chainwayUr4;
+    fetch('http://localhost:3001/rfid/ur4/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host: partial.host ?? reference.host,
+        port: partial.port ?? reference.port,
+        power: partial.power ?? reference.power,
+        antennas: partial.antennas ?? reference.antennas
+      })
+    }).catch(err => {
+      console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
+    });
+  };
+
+  const schedulePowerUpdate = (value: number) => {
+    pendingPowerValueRef.current = value;
+    if (powerUpdateTimeoutRef.current) {
+      clearTimeout(powerUpdateTimeoutRef.current);
+    }
+    powerUpdateTimeoutRef.current = setTimeout(() => {
+      sendUr4ConfigUpdate({ power: pendingPowerValueRef.current });
+      powerUpdateTimeoutRef.current = null;
+    }, 500);
+  };
+
+  const flushPowerUpdate = () => {
+    if (powerUpdateTimeoutRef.current) {
+      clearTimeout(powerUpdateTimeoutRef.current);
+      powerUpdateTimeoutRef.current = null;
+      sendUr4ConfigUpdate({ power: pendingPowerValueRef.current });
+    }
+  };
 
   // Auto-detect removido - causava loop infinito
   // Usuário deve clicar manualmente em "Detectar Portas Seriais"
@@ -990,19 +1047,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                             }));
                             setRfidFeedback(null);
                             
-                            // Enviar atualização ao servidor imediatamente
-                            fetch('http://localhost:3001/rfid/ur4/config', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                host: value,
-                                port: settings.rfid.chainwayUr4.port,
-                                power: settings.rfid.chainwayUr4.power,
-                                antennas: settings.rfid.chainwayUr4.antennas
-                              })
-                            }).catch(err => {
-                              console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
-                            });
+                          sendUr4ConfigUpdate({ host: value });
                           }}
                           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
                           placeholder="192.168.99.201"
@@ -1029,20 +1074,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                               }
                             }));
                             setRfidFeedback(null);
-                            
-                            // Enviar atualização ao servidor imediatamente
-                            fetch('http://localhost:3001/rfid/ur4/config', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                host: settings.rfid.chainwayUr4.host,
-                                port: value,
-                                power: settings.rfid.chainwayUr4.power,
-                                antennas: settings.rfid.chainwayUr4.antennas
-                              })
-                            }).catch(err => {
-                              console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
-                            });
+
+                          sendUr4ConfigUpdate({ port: value });
                           }}
                           className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                           min={1}
@@ -1076,28 +1109,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                             }
                           }));
                           setRfidFeedback(null);
-                          
-                          // Enviar atualização ao servidor imediatamente
-                          fetch('http://localhost:3001/rfid/ur4/config', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              host: settings.rfid.chainwayUr4.host,
-                              port: settings.rfid.chainwayUr4.port,
-                              power: value,
-                              antennas: settings.rfid.chainwayUr4.antennas
-                            })
-                          }).catch(err => {
-                            console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
-                          });
+                          schedulePowerUpdate(value);
                         }}
+                        onPointerUp={flushPowerUpdate}
+                        onMouseUp={flushPowerUpdate}
+                        onTouchEnd={flushPowerUpdate}
+                        onKeyUp={flushPowerUpdate}
                         className="w-full accent-green-600"
+                        disabled={powerStatus?.updating}
                       />
                       <div className="flex items-center justify-between text-sm text-gray-600">
                         <span>10 dBm</span>
                         <span className="font-semibold text-gray-900">{settings.rfid.chainwayUr4.power} dBm</span>
                         <span>33 dBm</span>
                       </div>
+                      {powerStatus?.updating && (
+                        <div className="flex items-center gap-2 text-xs text-amber-600">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Ajustando potência no leitor...
+                        </div>
+                      )}
                       <p className="text-xs text-gray-500">
                         Ajuste a potência conforme a distância e zona de leitura desejada.
                       </p>
@@ -1114,34 +1145,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                             <button
                               key={antenna}
                               onClick={() => {
-                                setSettings(s => {
-                                  const current = s.rfid.chainwayUr4.antennas;
-                                  const next = current.includes(antenna)
-                                    ? current.filter(a => a !== antenna)
-                                    : [...current, antenna].sort((a, b) => a - b);
-                                  
-                                  // Enviar atualização ao servidor imediatamente
-                                  fetch('http://localhost:3001/rfid/ur4/config', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      host: s.rfid.chainwayUr4.host,
-                                      port: s.rfid.chainwayUr4.port,
-                                      power: s.rfid.chainwayUr4.power,
-                                      antennas: next
-                                    })
-                                  }).catch(err => {
-                                    console.warn('⚠️ Não foi possível atualizar configuração no servidor:', err);
-                                  });
-                                  
-                                  return {
-                                    ...s,
-                                    rfid: {
-                                      ...s.rfid,
-                                      chainwayUr4: { ...s.rfid.chainwayUr4, antennas: next }
-                                    }
-                                  };
-                                });
+                                const current = settings.rfid.chainwayUr4.antennas;
+                                const next = current.includes(antenna)
+                                  ? current.filter(a => a !== antenna)
+                                  : [...current, antenna].sort((a, b) => a - b);
+
+                                setSettings(s => ({
+                                  ...s,
+                                  rfid: {
+                                    ...s.rfid,
+                                    chainwayUr4: { ...s.rfid.chainwayUr4, antennas: next }
+                                  }
+                                }));
+                                sendUr4ConfigUpdate({ antennas: next });
                                 setRfidFeedback(null);
                               }}
                               className={`p-3 rounded-lg border-2 text-sm font-semibold transition-all ${

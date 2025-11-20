@@ -345,7 +345,72 @@ function sanitizeAntennaList(input) {
   return normalized.length ? normalized : [...defaultRFIDConfig.antennas];
 }
 
-async function applyRFIDPowerSetting(powerValue, options = {}) {
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const POWER_COMMAND_COOLDOWN_MS = 1200;
+let powerExecutionChain = Promise.resolve();
+let lastPowerExecutionPromise = Promise.resolve();
+let lastPowerCommandAt = 0;
+let powerQueueDepth = 0;
+let pendingCoalescedPowerRequest = null;
+let coalesceRunnerActive = false;
+let coalesceRunnerPromise = null;
+
+function emitPowerStatus(payload = {}) {
+  if (!io) {
+    return;
+  }
+  io.emit('power-status', {
+    updating: Boolean(payload.updating),
+    targetPower: payload.targetPower ?? null,
+    queueLength: powerQueueDepth + (pendingCoalescedPowerRequest ? 1 : 0),
+    timestamp: Date.now()
+  });
+}
+
+function enqueuePowerCommand(executor) {
+  powerQueueDepth++;
+  const next = powerExecutionChain.then(() => executor());
+  lastPowerExecutionPromise = next;
+
+  powerExecutionChain = next
+    .catch((error) => {
+      console.error('❌ [RFID] Erro na fila de potência:', error.message || error);
+    })
+    .finally(() => {
+      powerQueueDepth = Math.max(0, powerQueueDepth - 1);
+    });
+
+  return next;
+}
+
+async function ensurePowerCooldown(skipCooldown = false) {
+  if (skipCooldown) {
+    return;
+  }
+  const elapsed = Date.now() - lastPowerCommandAt;
+  if (elapsed < POWER_COMMAND_COOLDOWN_MS) {
+    await delay(POWER_COMMAND_COOLDOWN_MS - elapsed);
+  }
+}
+
+async function runSinglePowerRequest(request) {
+  const { powerValue, options = {} } = request;
+  await ensurePowerCooldown(options.skipCooldown);
+  emitPowerStatus({ updating: true, targetPower: Number(powerValue) });
+  try {
+    return await performRFIDPowerSetting(powerValue, options);
+  } finally {
+    lastPowerCommandAt = Date.now();
+    emitPowerStatus({ updating: false });
+  }
+}
+
+function waitForPendingPowerUpdates() {
+  return lastPowerExecutionPromise.catch(() => {});
+}
+
+async function performRFIDPowerSetting(powerValue, options = {}) {
   const { allowReconnect = true, manageReadingState = true, antennas } = options;
 
   if (powerValue === undefined || powerValue === null) {
@@ -422,6 +487,31 @@ async function applyRFIDPowerSetting(powerValue, options = {}) {
   }
 
   return commandApplied;
+}
+
+async function applyRFIDPowerSetting(powerValue, options = {}) {
+  const request = { powerValue, options };
+  if (options.coalesce) {
+    pendingCoalescedPowerRequest = request;
+    if (!coalesceRunnerActive) {
+      coalesceRunnerActive = true;
+      coalesceRunnerPromise = enqueuePowerCommand(async () => {
+        try {
+          while (pendingCoalescedPowerRequest) {
+            const current = pendingCoalescedPowerRequest;
+            pendingCoalescedPowerRequest = null;
+            await runSinglePowerRequest(current);
+          }
+        } finally {
+          coalesceRunnerActive = false;
+          coalesceRunnerPromise = null;
+        }
+      });
+    }
+    return coalesceRunnerPromise || lastPowerExecutionPromise;
+  }
+
+  return enqueuePowerCommand(() => runSinglePowerRequest(request));
 }
 
 rfidConfig.antennas = sanitizeAntennaList(rfidConfig.antennas);
@@ -501,7 +591,8 @@ async function connectToRFIDReader() {
       await applyRFIDPowerSetting(rfidConfig.power, {
         allowReconnect: false,
         manageReadingState: false,
-        antennas: rfidConfig.antennas
+        antennas: rfidConfig.antennas,
+        skipCooldown: true
       });
     }
 
@@ -571,6 +662,7 @@ async function startRFIDReading() {
   }
   
   try {
+    await waitForPendingPowerUpdates();
     clearRFIDReadings();
     await chainwayApi.startScan();
     rfidReading = true;
@@ -609,6 +701,7 @@ async function disconnectFromRFIDReader() {
   if (!chainwayApi) return;
   
   try {
+    await waitForPendingPowerUpdates();
     // Parar leitura primeiro
     if (rfidReading) {
       console.log('🛑 [RFID] Parando leitura antes de desconectar...');
@@ -661,6 +754,12 @@ io.on('connection', (socket) => {
     isReading: rfidReading,
     totalReadings: rfidTotalReadings
   });
+  socket.emit('power-status', {
+    updating: false,
+    targetPower: rfidConfig.power,
+    queueLength: powerQueueDepth + (pendingCoalescedPowerRequest ? 1 : 0),
+    timestamp: Date.now()
+  });
 
   socket.on('get-status', () => {
     socket.emit('connection-status', { 
@@ -672,6 +771,12 @@ io.on('connection', (socket) => {
     socket.emit('readings-update', { 
       readings: rfidReadings.slice(-50),
       totalReadings: rfidTotalReadings
+    });
+    socket.emit('power-status', {
+      updating: false,
+      targetPower: rfidConfig.power,
+      queueLength: powerQueueDepth + (pendingCoalescedPowerRequest ? 1 : 0),
+      timestamp: Date.now()
     });
   });
 
@@ -815,7 +920,8 @@ app.post('/rfid/ur4/config', async (req, res) => {
       const applied = await applyRFIDPowerSetting(rfidConfig.power, {
         allowReconnect: true,
         manageReadingState: true,
-        antennas: rfidConfig.antennas
+        antennas: rfidConfig.antennas,
+        coalesce: true
       });
       if (!applied) {
         console.warn('⚠️ [RFID] Não foi possível aplicar nova potência/antenas imediatamente.');

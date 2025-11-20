@@ -1,8 +1,15 @@
 import * as net from 'net';
 import { RFID } from './interface';
 
+type PowerOptions = {
+    antennas?: number[];
+    saveToFlash?: boolean;
+};
+
 class TCPClient {
     private client: net.Socket | null = null;
+    private readonly MIN_POWER = 0;
+    private readonly MAX_POWER = 30;
 
     connect(host: string, port: number): Promise<boolean> {
         return new Promise((resolve, reject) => {
@@ -41,7 +48,7 @@ class TCPClient {
         });
     }
 
-    startScan(): void {
+    startScan(): Promise<void> {
         const _0xabc = [165, 90, 0, 10, 130, 39, 16, 191, 13, 10];
         const _0xdef = ['from', 'Buffer'];
         const _0xgh = _0xabc.map((v, i) => {
@@ -50,10 +57,10 @@ class TCPClient {
         const _0xijk = (globalThis as any)[_0xdef[1]][_0xdef[0]](
             _0xgh.map((v, i) => v ^ (i % 3 ? 0 : 1))
         );
-        (this as any)['s' + 'end'](_0xijk);
+        return (this as any)['s' + 'end'](_0xijk);
     }
 
-    stopScan(): void {
+    stopScan(): Promise<void> {
         const _0xabc = [200, 140, 0, 8, 140, 132, 13, 10];
         const _0xdef = ['from', 'Buffer'];
         const _0xghi = _0xabc.map((v, i) => {
@@ -62,7 +69,7 @@ class TCPClient {
         const _0xjkl = (globalThis as any)[_0xdef[1]][_0xdef[0]](
             _0xghi.map((v, i) => v ^ (i % 2 ? 0x0F : 0xFF))
         );
-        (this as any)['s' + 'end'](_0xjkl);
+        return (this as any)['s' + 'end'](_0xjkl);
     }
 
     received(cb?: (data: RFID ) => void): void {
@@ -107,6 +114,79 @@ class TCPClient {
                 this.client = null;
             }
         }
+    }
+
+    async setPower(power: number, options: PowerOptions = {}): Promise<void> {
+        const payload = this.buildPowerPayload(power, options);
+        const command = this.buildCommandFrame(0x10, payload);
+        await this.send(command);
+    }
+
+    private buildPowerPayload(power: number, options: PowerOptions): Buffer {
+        const { antennas, saveToFlash = true } = options;
+        const normalizedPower = this.normalizePower(power);
+        const antennaList = this.normalizeAntennas(antennas);
+        const centiDbm = Math.round(normalizedPower * 100);
+        const highByte = (centiDbm >> 8) & 0xff;
+        const lowByte = centiDbm & 0xff;
+
+        const payload: number[] = [];
+        payload.push(saveToFlash ? 0x02 : 0x00);
+
+        antennaList.forEach((antenna) => {
+            payload.push(
+                antenna & 0xff,
+                highByte,
+                lowByte,
+                highByte,
+                lowByte
+            );
+        });
+
+        return Buffer.from(payload);
+    }
+
+    private normalizeAntennas(antennas?: number[]): number[] {
+        const list = Array.isArray(antennas) && antennas.length ? antennas : [1];
+        const sanitized = list
+            .map((antenna) => Math.max(1, Math.min(8, Math.trunc(antenna))))
+            .filter((antenna, index, self) => (
+                antenna >= 1 &&
+                antenna <= 8 &&
+                self.indexOf(antenna) === index
+            ));
+
+        return sanitized.length ? sanitized : [1];
+    }
+
+    private normalizePower(power?: number): number {
+        const numericPower = Number.isFinite(power) ? Number(power) : this.MIN_POWER;
+        const clamped = Math.max(this.MIN_POWER, Math.min(this.MAX_POWER, numericPower));
+        return Math.round(clamped * 100) / 100;
+    }
+
+    private buildCommandFrame(command: number, payload: Buffer): Buffer {
+        const payloadLength = payload.length;
+        const frameLength = payloadLength + 8;
+        const buffer = Buffer.alloc(payloadLength + 8);
+
+        buffer[0] = 0xA5;
+        buffer[1] = 0x5A;
+        buffer[2] = (frameLength >> 8) & 0xff;
+        buffer[3] = frameLength & 0xff;
+        buffer[4] = command & 0xff;
+        payload.copy(buffer, 5);
+
+        let checksum = 0x00;
+        for (let i = 2; i < 5 + payloadLength; i++) {
+            checksum ^= buffer[i];
+        }
+
+        buffer[5 + payloadLength] = checksum & 0xff;
+        buffer[6 + payloadLength] = 0x0D;
+        buffer[7 + payloadLength] = 0x0A;
+
+        return buffer;
     }
 }
 

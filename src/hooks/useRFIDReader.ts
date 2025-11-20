@@ -25,6 +25,13 @@ interface ConnectionStatus {
   totalReadings: number;
 }
 
+interface PowerStatus {
+  updating: boolean;
+  targetPower: number | null;
+  queueLength: number;
+  timestamp: number;
+}
+
 export function useRFIDReader() {
   const [config, setConfig] = useState<RFIDReaderConfig>({
     ip: '192.168.99.201',
@@ -39,6 +46,13 @@ export function useRFIDReader() {
     isConnected: false,
     isReading: false,
     totalReadings: 0
+  });
+
+  const [powerStatus, setPowerStatus] = useState<PowerStatus>({
+    updating: false,
+    targetPower: null,
+    queueLength: 0,
+    timestamp: Date.now()
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +103,15 @@ export function useRFIDReader() {
       setError(data.message);
     };
 
+    const handlePowerStatus = (data: Partial<PowerStatus>) => {
+      setPowerStatus(current => ({
+        updating: Boolean(data.updating),
+        targetPower: typeof data.targetPower === 'number' ? data.targetPower : current.targetPower,
+        queueLength: typeof data.queueLength === 'number' ? data.queueLength : current.queueLength,
+        timestamp: data.timestamp ?? Date.now()
+      }));
+    };
+
     // Registrar eventos
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
@@ -97,6 +120,7 @@ export function useRFIDReader() {
     socket.on('rfid-reading', handleRFIDReading);
     socket.on('readings-update', handleReadingsUpdate);
     socket.on('error', handleError);
+    socket.on('power-status', handlePowerStatus);
 
     // Solicitar status atual do servidor ao montar
     if (socket.connected) {
@@ -114,6 +138,7 @@ export function useRFIDReader() {
       socket.off('rfid-reading', handleRFIDReading);
       socket.off('readings-update', handleReadingsUpdate);
       socket.off('error', handleError);
+      socket.off('power-status', handlePowerStatus);
     };
   }, []);
 
@@ -188,6 +213,7 @@ export function useRFIDReader() {
     config,
     readings,
     status,
+    powerStatus,
     error,
     
     // Ações
@@ -200,6 +226,8 @@ export function useRFIDReader() {
     clearError
   };
 }
+
+
 
 
 
