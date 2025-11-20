@@ -1706,14 +1706,14 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
 
             {/* Modal de associação */}
             {showAssociationModal && selectedBatch && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <Card className="w-full max-w-3xl p-6 space-y-6 border border-gray-200 bg-white">
-                  <div className="flex items-center justify-between">
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-3 sm:p-4">
+                <Card className="w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col border border-gray-200 bg-white">
+                  <div className="flex items-center justify-between p-4 border-b shrink-0">
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-800">
+                      <h3 className="text-xl font-bold text-gray-800">
                         Lote #{selectedBatch.batchNumber}
                       </h3>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs text-gray-600">
                         {selectedBatch.itemName} · {selectedBatch.sku || 'SKU não informado'}
                       </p>
                     </div>
@@ -1732,26 +1732,27 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4 bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="grid grid-cols-4 gap-2 bg-gray-50 border border-gray-200 rounded-xl p-3 text-center shrink-0">
                     <div>
-                      <p className="text-xs text-gray-500">Quantidade prevista</p>
-                      <p className="text-2xl font-semibold text-gray-900">{cleanSummary.expected}</p>
+                      <p className="text-xs text-gray-500">Prevista</p>
+                      <p className="text-xl font-semibold text-gray-900">{cleanSummary.expected}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Já associados</p>
-                      <p className="text-2xl font-semibold text-blue-600">{cleanSummary.associated}</p>
+                      <p className="text-xs text-gray-500">Associados</p>
+                      <p className="text-xl font-semibold text-blue-600">{cleanSummary.associated}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Capturados agora</p>
-                      <p className="text-2xl font-semibold text-purple-600">{cleanSummary.newCount}</p>
+                      <p className="text-xs text-gray-500">Agora</p>
+                      <p className="text-xl font-semibold text-purple-600">{cleanSummary.newCount}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Total após envio</p>
-                      <p className="text-2xl font-semibold text-emerald-600">{cleanSummary.totalAfter}</p>
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-xl font-semibold text-emerald-600">{cleanSummary.totalAfter}</p>
                     </div>
                   </div>
 
-                  <div className="border-2 border-dashed border-blue-300 rounded-xl p-6 bg-blue-50/50">
+                  <div className="border-2 border-dashed border-blue-300 rounded-xl p-3 bg-blue-50/50 shrink-0">
                     <input
                       ref={hiddenCleanInputRef}
                       type="text"
@@ -1767,44 +1768,44 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                       aria-hidden="true"
                     />
 
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Radio className={readingActive ? 'text-emerald-600 animate-pulse' : 'text-gray-400'} size={32} />
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Radio className={readingActive ? 'text-emerald-600 animate-pulse' : 'text-gray-400'} size={28} />
                         <div>
-                          <p className="text-lg font-semibold text-gray-800">
+                          <p className="text-base font-semibold text-gray-800">
                             {readingActive ? 'Leitura em andamento' : 'Leitura parada'}
                           </p>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-xs text-gray-600">
                             {readingActive
-                              ? 'Passe cada peça pelo leitor RFID. As tags aparecem abaixo.'
-                              : 'Toque em “Iniciar leitura” e posicione as etiquetas no leitor.'}
+                              ? 'Passe cada peça pelo leitor RFID.'
+                              : 'Toque em "Iniciar leitura".'}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         {readingActive ? (
                           <Button onClick={stopAssociationReading} variant="secondary" size="sm" icon={Square}>
-                            Parar leitura
+                            Parar
                           </Button>
                         ) : (
                           <Button onClick={startAssociationReading} variant="primary" size="sm" icon={Play}>
-                            Iniciar leitura
+                            Iniciar
                           </Button>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-lg font-semibold text-gray-800">
+                        <h4 className="text-base font-semibold text-gray-800">
                           Tags capturadas ({scannedTags.length})
                         </h4>
                         {selectedBatch && (
-                          <p className="text-sm text-gray-500">
-                            Restam {remainingSlots} de {pendingPieces} tag(s) permitidas para este lote.
+                          <p className="text-xs text-gray-500">
+                            Restam {remainingSlots} de {pendingPieces} permitidas
                           </p>
                         )}
                       </div>
@@ -1818,10 +1819,10 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                         size="sm"
                         disabled={scannedTags.length === 0}
                       >
-                        Limpar lista
+                        Limpar
                       </Button>
                     </div>
-                    <div className="border border-gray-200 rounded-xl max-h-64 overflow-y-auto p-4 bg-white">
+                    <div className="border border-gray-200 rounded-xl max-h-48 overflow-y-auto p-3 bg-white">
                       {scannedTags.length === 0 ? (
                         <p className="text-sm text-gray-500 text-center py-6">
                           Nenhuma tag capturada ainda.
@@ -1892,17 +1893,17 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                   </div>
 
                   {associationResults.length > 0 && (
-                    <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-3">
+                    <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-2 shrink-0">
                       <div className="flex items-center justify-between">
-                        <h5 className="text-sm font-semibold text-gray-700">
-                          Resultado da última associação
+                        <h5 className="text-xs font-semibold text-gray-700">
+                          Resultado
                         </h5>
                         <span className="text-xs text-gray-500">
-                          {associationResults.filter(r => r.status === 'success').length} sucesso(s) ·{' '}
+                          {associationResults.filter(r => r.status === 'success').length} OK ·{' '}
                           {associationResults.filter(r => r.status === 'error').length} erro(s)
                         </span>
                       </div>
-                      <div className="max-h-48 overflow-y-auto space-y-2">
+                      <div className="max-h-32 overflow-y-auto space-y-1">
                         {associationResults.map(result => (
                           <div
                             key={`${result.tag}-${result.status}-${result.message}`}
@@ -1936,7 +1937,7 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
 
                   {associationFeedback && (
                     <div
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg shrink-0 ${
                         associationFeedback.type === 'success'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                           : associationFeedback.type === 'error'
@@ -1944,12 +1945,13 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                           : 'bg-blue-50 text-blue-700 border border-blue-100'
                       }`}
                     >
-                      <AlertCircle size={18} />
-                      <span className="text-sm font-medium">{associationFeedback.message}</span>
+                      <AlertCircle size={16} />
+                      <span className="text-xs font-medium">{associationFeedback.message}</span>
                     </div>
                   )}
+                  </div>
 
-                  <div className="flex justify-between pt-2">
+                  <div className="flex justify-between p-4 border-t shrink-0">
                     <Button
                       onClick={() => {
                         if (readingActive) stopAssociationReading();
@@ -1959,23 +1961,23 @@ const [expurgoTags, setExpurgoTags] = useState<SessionExpurgoTag[]>([]);
                         setSelectedBatch(null);
                       }}
                       variant="secondary"
-                      size="lg"
+                      size="sm"
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={handleAssociationSubmit}
                       variant="primary"
-                      size="lg"
+                      size="sm"
                       disabled={associationSubmitting || scannedTags.length === 0}
                     >
                       {associationSubmitting ? (
                         <div className="flex items-center gap-2">
-                          <Loader2 className="animate-spin" size={18} />
+                          <Loader2 className="animate-spin" size={16} />
                           Enviando...
                         </div>
                       ) : (
-                        `Associar ${scannedTags.length} tag(s)`
+                        `Associar ${scannedTags.length}`
                       )}
                     </Button>
                   </div>

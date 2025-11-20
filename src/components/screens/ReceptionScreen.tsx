@@ -396,10 +396,10 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
   };
 
   const renderTagList = () => (
-    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+    <div className="space-y-2 flex-1 overflow-y-auto pr-1">
       {rfidEntries.length === 0 ? (
-        <div className="text-sm text-gray-500 text-center py-6">
-          Nenhuma peça lida ainda. Clique em “Iniciar leitura” e aproxime as peças do leitor RFID.
+        <div className="text-xs text-gray-500 text-center py-4">
+          Nenhuma peça lida. Clique em "Iniciar".
         </div>
       ) : (
         rfidEntries.map(entry => {
@@ -407,36 +407,32 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
           return (
             <div
               key={entry.tag}
-              className={`border rounded-xl p-4 flex items-start justify-between gap-4 ${
+              className={`border rounded-lg p-2 flex items-start justify-between gap-2 ${
                 isWarning ? 'border-orange-300 bg-orange-50/60' : 'border-gray-200 bg-white'
               }`}
             >
-              <div>
-                <p className="font-semibold text-gray-800">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">
                   {entry.name}{' '}
                   {entry.fullNumber && (
-                    <span className="text-xs text-gray-500 font-medium">• {entry.fullNumber}</span>
+                    <span className="text-xs text-gray-500 font-normal">• {entry.fullNumber}</span>
                   )}
                 </p>
-                <p className="text-xs font-mono text-gray-500">{entry.tag}</p>
-                <div className="text-xs text-gray-500 mt-1">
-                  {entry.sku && <span>SKU {entry.sku} • </span>}
-                  {entry.status && <span>Status: {entry.status}</span>}
-                </div>
+                <p className="text-xs font-mono text-gray-500 truncate">{entry.tag}</p>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-1 shrink-0">
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                     isWarning ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
                   }`}
                 >
-                  {isWarning ? 'Não cadastrada' : 'Pronta'}
+                  {isWarning ? '✕' : '✓'}
                 </span>
                 <button
                   onClick={() => removeEntry(entry.tag)}
-                  className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                  className="text-xs text-red-600 hover:text-red-800"
                 >
-                  remover
+                  ✕
                 </button>
               </div>
             </div>
@@ -447,22 +443,21 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
   );
 
   const renderSummary = () => (
-    <div className="max-h-[420px] overflow-y-auto">
+    <div className="flex-1 overflow-y-auto">
       {rfidSummary.length === 0 ? (
-        <div className="text-sm text-gray-500 text-center py-6">
-          Ainda não há peças agrupadas. As leituras aparecerão aqui automaticamente.
+        <div className="text-xs text-gray-500 text-center py-4">
+          Nenhuma peça agrupada ainda.
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {rfidSummary.map(summary => (
-            <div key={summary.key} className="border border-gray-200 rounded-xl p-4 bg-white flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-gray-800">{summary.name}</p>
-                {summary.sku && <p className="text-xs text-gray-500">SKU {summary.sku}</p>}
-                {summary.fullNumber && <p className="text-xs text-gray-500">Última peça: {summary.fullNumber}</p>}
+            <div key={summary.key} className="border border-gray-200 rounded-lg p-2 bg-white flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">{summary.name}</p>
+                {summary.sku && <p className="text-xs text-gray-500 truncate">SKU {summary.sku}</p>}
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-blue-600">{summary.quantity}</p>
+              <div className="text-right shrink-0">
+                <p className="text-lg font-bold text-blue-600">{summary.quantity}</p>
                 <p className="text-xs text-gray-500">peça(s)</p>
               </div>
             </div>
@@ -511,12 +506,12 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
       {showModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center px-3 sm:px-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal}></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="p-4 md:p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-hidden flex flex-col">
+            <div className="p-3 border-b flex items-center justify-between gap-2 shrink-0">
               <div>
-                <h3 className="text-2xl font-semibold text-gray-800">Leitura RFID · Recepção</h3>
-                <p className="text-sm text-gray-500">
-                  Cliente: {selectedClient?.name || 'Não configurado'} • Total lido: {totalPieces}
+                <h3 className="text-lg font-semibold text-gray-800">Recepção RFID</h3>
+                <p className="text-xs text-gray-500">
+                  {selectedClient?.name || 'Não configurado'} • {totalPieces} lida(s)
                 </p>
               </div>
               <Button variant="secondary" size="sm" onClick={closeModal}>
@@ -524,58 +519,55 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
               </Button>
             </div>
 
-            <div className="p-4 md:p-5 space-y-4 overflow-y-auto">
-              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-1 text-xs shrink-0">
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
                     readerStatus.isConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'
                   }`}
                 >
-                  {readerStatus.isConnected ? 'Leitor conectado' : 'Leitor desconectado'}
+                  {readerStatus.isConnected ? '✓ Conectado' : '✕ Desconectado'}
                 </span>
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
                     rfidReadingActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
                   }`}
                 >
-                  {rfidReadingActive ? 'Leitura em andamento' : 'Leitura parada'}
+                  {rfidReadingActive ? 'Lendo...' : 'Parado'}
                 </span>
-                <span className="px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
-                  {validEntries.length} pronta(s) para recepção
+                <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
+                  {validEntries.length} pronta(s)
                 </span>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2">
                   {!rfidReadingActive ? (
-                    <Button onClick={startReceptionReading} icon={Radio}>
-                      Iniciar leitura
+                    <Button onClick={startReceptionReading} icon={Radio} size="sm">
+                      Iniciar
                     </Button>
                   ) : (
-                    <Button variant="secondary" onClick={stopReceptionReading}>
-                      Parar leitura
+                    <Button variant="secondary" onClick={stopReceptionReading} size="sm">
+                      Parar
                     </Button>
                   )}
                   {rfidLookupLoading && (
-                    <div className="flex items-center gap-2 text-sm text-purple-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Consultando tags...
+                    <div className="flex items-center gap-1 text-xs text-purple-600">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Consultando...
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-gray-500">
-                  Total lido: <span className="font-semibold text-gray-800">{totalPieces}</span>
-                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-                  <label className="font-semibold">Data das entradas:</label>
+              <div className="grid grid-cols-1 gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                  <label className="font-semibold">Data:</label>
                   <input
                     type="date"
                     value={selectedDate}
                     onChange={e => setSelectedDate(e.target.value)}
-                    className="px-3 py-2 border rounded-lg text-sm"
+                    className="px-2 py-1 border rounded-lg text-xs"
                   />
                   <Button
                     variant="secondary"
@@ -583,13 +575,13 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
                     onClick={loadDailyEntries}
                     disabled={loadingEntries}
                   >
-                    {loadingEntries ? 'Atualizando...' : 'Atualizar lista'}
+                    {loadingEntries ? 'Atualizando...' : 'Atualizar'}
                   </Button>
                   <span className="text-xs text-gray-500">
-                    Entradas registradas: <strong>{dailyEntriesCount}</strong>
+                    Entradas: <strong>{dailyEntriesCount}</strong>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -598,9 +590,6 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
                   >
                     {exporting ? 'Exportando...' : 'Exportar expurgo'}
                   </Button>
-                  <span className="text-xs text-gray-500">
-                    Dados de {new Date(selectedDate).toLocaleDateString()}
-                  </span>
                 </div>
               </div>
 
@@ -612,23 +601,23 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
                 onFocus={() => rfidReadingActive && focusHiddenInput()}
               />
 
-              <div className="flex gap-3 border rounded-xl p-1 bg-gray-50">
+              <div className="flex gap-2 border rounded-xl p-1 bg-gray-50 shrink-0">
                 <button
                   onClick={() => setActiveTab('tags')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                     activeTab === 'tags' ? 'bg-white shadow text-blue-700' : 'text-gray-500'
                   }`}
                 >
-                  <ListChecks size={16} />
-                  Tags lidas
+                  <ListChecks size={14} />
+                  Tags
                 </button>
                 <button
                   onClick={() => setActiveTab('summary')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                     activeTab === 'summary' ? 'bg-white shadow text-blue-700' : 'text-gray-500'
                   }`}
                 >
-                  <BarChart2 size={16} />
+                  <BarChart2 size={14} />
                   Resumo
                 </button>
               </div>
@@ -637,44 +626,45 @@ export const ReceptionScreen: React.FC<ReceptionScreenProps> = ({ onBack }) => {
 
               {rfidFeedback && (
                 <div
-                  className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs shrink-0 ${
                     rfidFeedback.type === 'success'
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                       : 'bg-red-50 text-red-700 border border-red-100'
                   }`}
                 >
                   {rfidFeedback.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4" />
+                    <CheckCircle2 className="w-3 h-3" />
                   ) : (
-                    <AlertCircle className="w-4 h-4" />
+                    <AlertCircle className="w-3 h-3" />
                   )}
                   <span>{rfidFeedback.message}</span>
                 </div>
               )}
             </div>
 
-            <div className="p-4 md:p-5 border-t flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center sm:justify-between">
-              <div className="text-sm text-gray-500">
-                {validEntries.length} peça(s) pronta(s) para recepção
+            <div className="p-3 border-t flex items-center justify-between gap-2 shrink-0">
+              <div className="text-xs text-gray-500">
+                {validEntries.length} pronta(s)
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button variant="secondary" onClick={() => setRfidEntries([])} disabled={rfidSubmitting}>
-                  Limpar lista
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setRfidEntries([])} disabled={rfidSubmitting}>
+                  Limpar
                 </Button>
-                <Button variant="secondary" onClick={closeModal} disabled={rfidSubmitting}>
+                <Button variant="secondary" size="sm" onClick={closeModal} disabled={rfidSubmitting}>
                   Cancelar
                 </Button>
                 <Button
+                  size="sm"
                   onClick={handleConfirmReception}
                   disabled={validEntries.length === 0 || rfidSubmitting}
                 >
                   {rfidSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
                       Registrando...
                     </>
                   ) : (
-                    'Confirmar recepção'
+                    'Confirmar'
                   )}
                 </Button>
               </div>

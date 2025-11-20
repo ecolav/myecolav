@@ -1312,14 +1312,14 @@ useEffect(() => {
             {/* Modal de Distribuição RFID */}
             {showRfidModal && (
               <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-3 sm:px-4">
-                <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto p-4 md:p-6 space-y-4">
-                  <div className="flex items-center justify-between gap-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between gap-3 p-4 border-b shrink-0">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-800">
+                      <h2 className="text-lg font-bold text-gray-800">
                         Distribuição RFID · {getSectorName(selectedSectorId)}
                       </h2>
-                      <p className="text-sm text-gray-600">
-                        Inicie a leitura e aproxime cada peça RFID do leitor. Os itens serão reconhecidos automaticamente.
+                      <p className="text-xs text-gray-600">
+                        Inicie a leitura e aproxime cada peça RFID do leitor.
                       </p>
                     </div>
                     <Button variant="secondary" size="sm" onClick={closeModals}>
@@ -1327,7 +1327,8 @@ useEffect(() => {
                     </Button>
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 p-3 md:p-4 space-y-4">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="rounded-xl border border-gray-200 p-3 space-y-3 shrink-0">
                     <div className="flex flex-wrap gap-3 items-center text-sm">
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
@@ -1440,52 +1441,52 @@ useEffect(() => {
                     aria-hidden="true"
                   />
 
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     {!rfidReadingActive ? (
                       <Button
                         variant="primary"
-                        size="lg"
-                        className="sm:w-48"
+                        size="sm"
+                        className="sm:w-40"
                         onClick={startRfidReading}
                       >
                         Iniciar leitura
                       </Button>
                     ) : (
-                      <div className="flex items-center gap-3 text-sm text-purple-700">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Leitura em andamento... aproxime as peças do leitor.
+                      <div className="flex items-center gap-2 text-xs text-purple-700">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Leitura em andamento...
                       </div>
                     )}
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 p-4 space-y-3 min-h-[220px]">
-                    <h3 className="text-lg font-semibold text-gray-800">
+                  <div className="rounded-xl border border-gray-200 p-3 space-y-2 flex-1 overflow-hidden flex flex-col">
+                    <h3 className="text-base font-semibold text-gray-800 shrink-0">
                       Peças registradas ({rfidTotalPieces})
                     </h3>
                     {rfidEntries.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        Nenhuma peça lida até o momento. Clique em "Iniciar leitura" e passe as peças pelo leitor RFID.
+                      <p className="text-xs text-gray-500">
+                        Nenhuma peça lida. Clique em "Iniciar leitura".
                       </p>
                     ) : (
                       <>
-                        <div className="space-y-3">
-                          <div className="max-h-[420px] overflow-y-auto pr-1">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <div className="flex-1 overflow-y-auto space-y-2">
+                          <div className="overflow-y-auto pr-1">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                               {rfidEntriesPageItems.map(entry => {
                             const isNotFound = entry.notFound && !entry.fullNumber && !entry.name;
                             const displayTid = entry.tid || entry.tag; // Mostrar TID se disponível, senão mostra a tag
                             return (
                               <div
                                 key={entry.tag}
-                                className={`border rounded-lg p-3 flex justify-between items-center ${
+                                className={`border rounded-lg p-2 flex justify-between items-center ${
                                   isNotFound 
                                     ? 'border-orange-300 bg-orange-50' 
                                     : 'border-gray-200'
                                 }`}
                               >
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className={`text-sm font-semibold font-mono ${
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <p className={`text-xs font-semibold font-mono truncate ${
                                       isNotFound ? 'text-orange-800' : 'text-gray-800'
                                     }`}>
                                       {displayTid}
@@ -1497,28 +1498,13 @@ useEffect(() => {
                                     )}
                                   </div>
                                   {!isNotFound && (
-                                    <div className="mt-1 space-y-0.5">
-                                      <p className="text-xs font-semibold text-gray-700">
+                                    <div className="mt-0.5 space-y-0">
+                                      <p className="text-xs font-semibold text-gray-700 truncate">
                                         {entry.name}
                                       </p>
                                       {entry.fullNumber && (
-                                        <p className="text-xs text-gray-500">
-                                          Peça: {entry.fullNumber}
-                                        </p>
-                                      )}
-                                      {entry.clientName && (
-                                        <p className="text-xs text-gray-500">
-                                          Cliente: {entry.clientName}
-                                        </p>
-                                      )}
-                                      {entry.status && (
-                                        <p className={`text-xs font-medium ${
-                                          entry.status === 'EM_USO' ? 'text-green-600' :
-                                          entry.status === 'DISTRIBUIDO' ? 'text-blue-600' :
-                                          entry.status === 'EXPURGO' ? 'text-orange-600' :
-                                          'text-gray-600'
-                                        }`}>
-                                          Status: {entry.status.replace(/_/g, ' ')}
+                                        <p className="text-xs text-gray-500 truncate">
+                                          {entry.fullNumber}
                                         </p>
                                       )}
                                     </div>
@@ -1526,9 +1512,9 @@ useEffect(() => {
                                 </div>
                                 <button
                                   onClick={() => removeRfidEntry(entry.tag)}
-                                  className="text-xs text-red-600 hover:text-red-800 ml-2"
+                                  className="text-xs text-red-600 hover:text-red-800 ml-1 shrink-0"
                                 >
-                                  remover
+                                  ✕
                                 </button>
                               </div>
                             );
@@ -1536,20 +1522,20 @@ useEffect(() => {
                             </div>
                           </div>
                           {rfidEntries.length > RFID_ENTRIES_PAGE_SIZE && (
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600">
+                            <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs text-gray-600 shrink-0">
                               <span className="font-medium text-gray-700">
-                                Página {rfidEntriesPage + 1} de {rfidEntriesTotalPages}
+                                Pág {rfidEntriesPage + 1}/{rfidEntriesTotalPages}
                               </span>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
                                 <button
-                                  className="px-4 py-2 rounded-xl border border-gray-300 bg-white text-base font-semibold disabled:opacity-40"
+                                  className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-xs font-semibold disabled:opacity-40"
                                   onClick={() => setRfidEntriesPage(page => Math.max(page - 1, 0))}
                                   disabled={rfidEntriesPage === 0}
                                 >
-                                  ◀ Anterior
+                                  ◀
                                 </button>
                                 <button
-                                  className="px-4 py-2 rounded-xl border border-gray-300 bg-white text-base font-semibold disabled:opacity-40"
+                                  className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-xs font-semibold disabled:opacity-40"
                                   onClick={() =>
                                     setRfidEntriesPage(page =>
                                       page < rfidEntriesTotalPages - 1 ? page + 1 : page
@@ -1557,75 +1543,77 @@ useEffect(() => {
                                   }
                                   disabled={rfidEntriesPage >= rfidEntriesTotalPages - 1}
                                 >
-                                  Próxima ▶
+                                  ▶
                                 </button>
                               </div>
                             </div>
                           )}
                         </div>
-                        <div className="pt-2 border-t border-gray-200">
-                          <p className="text-sm font-semibold text-gray-800 text-center">
-                            Total: {rfidTotalPieces} tag(s) lida(s)
+                        <div className="pt-1 border-t border-gray-200 shrink-0">
+                          <p className="text-xs font-semibold text-gray-800 text-center">
+                            Total: {rfidTotalPieces} tag(s)
                           </p>
                         </div>
                       </>
                     )}
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 p-4 space-y-2 min-h-[180px]">
-                    <h4 className="text-sm font-semibold text-gray-800">Resumo</h4>
+                  <div className="rounded-xl border border-gray-200 p-2 space-y-1 shrink-0">
+                    <h4 className="text-xs font-semibold text-gray-800">Resumo</h4>
                     {rfidNotFoundCount > 0 ? (
-                      <div className="space-y-2">
-                        <p className="text-lg font-bold text-orange-800">
-                          {rfidNotFoundCount} tag(s) não cadastrada(s)
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-orange-800">
+                          {rfidNotFoundCount} não cadastrada(s)
                         </p>
                         {rfidFoundCount > 0 && (
                           <p className="text-xs text-gray-600">
-                            {rfidFoundCount} tag(s) cadastrada(s) pronta(s) para distribuir.
+                            {rfidFoundCount} pronta(s) para distribuir
                           </p>
                         )}
                       </div>
                     ) : rfidSummary.length > 0 ? (
                       <>
-                        <p className="text-xs text-gray-600 mb-2">
-                          {rfidFoundCount} tag(s) cadastrada(s) pronta(s) para distribuir:
+                        <p className="text-xs text-gray-600">
+                          {rfidFoundCount} pronta(s):
                         </p>
-                        <ul className="text-xs text-gray-600 space-y-1">
+                        <ul className="text-xs text-gray-600 space-y-0.5 max-h-20 overflow-y-auto">
                           {rfidSummary.map(row => (
                             <li key={row.linenItemId}>
-                              {row.name} · {row.quantity} peça(s){row.sku ? ` · SKU ${row.sku}` : ''}
+                              {row.name} · {row.quantity}x
                             </li>
                           ))}
                         </ul>
                       </>
                     ) : (
                       <p className="text-xs text-gray-500">
-                        Nenhuma tag lida ainda.
+                        Nenhuma tag lida.
                       </p>
                     )}
                   </div>
 
                   {rfidFeedback && (
                     <div
-                      className={`p-3 rounded-lg text-sm flex items-center gap-2 ${
+                      className={`p-2 rounded-lg text-xs flex items-center gap-2 shrink-0 ${
                         rfidFeedback.type === 'success'
                           ? 'bg-green-50 border border-green-200 text-green-700'
                           : 'bg-red-50 border border-red-200 text-red-700'
                       }`}
                     >
                       {rfidFeedback.type === 'success' ? (
-                        <CheckCircle2 className="w-4 h-4" />
+                        <CheckCircle2 className="w-3 h-3" />
                       ) : (
-                        <AlertCircle className="w-4 h-4" />
+                        <AlertCircle className="w-3 h-3" />
                       )}
                       <span>{rfidFeedback.message}</span>
                     </div>
                   )}
+                  </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex gap-2 p-4 border-t shrink-0">
                     <Button
                       variant="primary"
                       fullWidth
+                      size="sm"
                       onClick={handleRfidDistribution}
                       disabled={
                         rfidSubmitting ||
@@ -1636,16 +1624,17 @@ useEffect(() => {
                     >
                       {rfidSubmitting ? (
                         <>
-                          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
                           Distribuindo...
                         </>
                       ) : (
-                        `Distribuir ${rfidTotalPieces} peça(s)`
+                        `Distribuir ${rfidTotalPieces}`
                       )}
                     </Button>
                     <Button
                       variant="secondary"
                       fullWidth
+                      size="sm"
                       onClick={() => {
                         setRfidEntries([]);
                         setRfidFeedback(null);
@@ -1653,7 +1642,7 @@ useEffect(() => {
                       }}
                       disabled={rfidSubmitting}
                     >
-                      Reiniciar leitura
+                      Reiniciar
                     </Button>
                   </div>
                 </div>
