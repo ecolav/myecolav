@@ -315,12 +315,128 @@ const rfidConfigPath = path.join(__dirname, 'rfid-config.json');
 
 let rfidConfig = { ...defaultRFIDConfig };
 
+function isValidIPv4(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const octets = value.trim().split('.');
+  if (octets.length !== 4) {
+    return false;
+  }
+  return octets.every(part => {
+    if (!/^\d+$/.test(part)) return false;
+    const num = Number(part);
+    return num >= 0 && num <= 255;
+  });
+}
+
+function sanitizeAntennaList(input) {
+  if (!input) {
+    return [...defaultRFIDConfig.antennas];
+  }
+
+  const list = Array.isArray(input) ? input : [input];
+  const normalized = list
+    .map((antenna) => Number(antenna))
+    .filter((antenna) => Number.isFinite(antenna))
+    .map((antenna) => Math.max(1, Math.min(8, Math.trunc(antenna))))
+    .filter((antenna, index, self) => antenna >= 1 && antenna <= 8 && self.indexOf(antenna) === index);
+
+  return normalized.length ? normalized : [...defaultRFIDConfig.antennas];
+}
+
+async function applyRFIDPowerSetting(powerValue, options = {}) {
+  const { allowReconnect = true, manageReadingState = true, antennas } = options;
+
+  if (powerValue === undefined || powerValue === null) {
+    console.log('ℹ️ [RFID] Nenhum valor de potência informado para aplicar.');
+    return false;
+  }
+
+  if (!chainwayApi || typeof chainwayApi.setPower !== 'function') {
+    console.log('⚠️ [RFID] Método setPower indisponível na biblioteca chainway-rfid');
+    return false;
+  }
+
+  const numericPower = Number(powerValue);
+  if (!Number.isFinite(numericPower)) {
+    console.log(`⚠️ [RFID] Valor de potência inválido: ${powerValue}`);
+    return false;
+  }
+
+  const normalizedPower = Math.max(0, Math.min(30, Math.round(numericPower * 100) / 100));
+  const antennaList = sanitizeAntennaList(antennas ?? rfidConfig.antennas);
+
+  if (!rfidConnected) {
+    console.log('ℹ️ [RFID] Potência atualizada será aplicada quando o leitor conectar.');
+    return false;
+  }
+
+  const wasReading = rfidReading && manageReadingState;
+
+  if (wasReading) {
+    console.log('⏸️ [RFID] Pausando leitura para aplicar nova potência...');
+    try {
+      await stopRFIDReading();
+    } catch (pauseError) {
+      console.error('⚠️ [RFID] Erro ao pausar leitura antes de ajustar potência:', pauseError.message || pauseError);
+    }
+  }
+
+  const sendPowerCommand = async () => {
+    try {
+      await chainwayApi.setPower(normalizedPower, {
+        antennas: antennaList,
+        saveToFlash: true
+      });
+      console.log(`✅ [RFID] Potência aplicada: ${normalizedPower} dBm | Antenas: ${antennaList.join(', ')}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [RFID] Erro ao aplicar potência (${normalizedPower} dBm):`, error.message || error);
+      return false;
+    }
+  };
+
+  let commandApplied = await sendPowerCommand();
+
+  if (!commandApplied && allowReconnect) {
+    console.log('🔄 [RFID] Tentando reconectar para reaplicar potência...');
+    try {
+      await disconnectFromRFIDReader();
+      await connectToRFIDReader();
+      if (rfidConnected) {
+        commandApplied = await sendPowerCommand();
+      }
+    } catch (reconnectError) {
+      console.error('❌ [RFID] Falha ao reconectar durante ajuste de potência:', reconnectError.message || reconnectError);
+    }
+  }
+
+  if (wasReading && rfidConnected) {
+    try {
+      await startRFIDReading();
+      console.log('▶️ [RFID] Leitura retomada após ajuste de potência');
+    } catch (resumeError) {
+      console.error('⚠️ [RFID] Não foi possível retomar leitura automaticamente:', resumeError.message || resumeError);
+    }
+  }
+
+  return commandApplied;
+}
+
+rfidConfig.antennas = sanitizeAntennaList(rfidConfig.antennas);
+
 function loadRFIDConfig() {
   try {
     if (fs.existsSync(rfidConfigPath)) {
       const fileData = fs.readFileSync(rfidConfigPath, 'utf-8');
       const parsed = JSON.parse(fileData);
       rfidConfig = { ...rfidConfig, ...parsed };
+      if (!isValidIPv4(rfidConfig.ip)) {
+        console.warn(`⚠️ [RFID] IP inválido em rfid-config (${rfidConfig.ip}), usando padrão ${defaultRFIDConfig.ip}`);
+        rfidConfig.ip = defaultRFIDConfig.ip;
+      }
+      rfidConfig.antennas = sanitizeAntennaList(rfidConfig.antennas);
       console.log(`📁 [RFID] Configuração carregada de ${rfidConfigPath}`, rfidConfig);
     } else {
       console.log('📁 [RFID] Nenhum arquivo de configuração encontrado, usando padrão.');
@@ -349,6 +465,18 @@ let rfidTotalReadings = 0;
 let rfidReceiverAttached = false;
 let rfidReconnecting = false; // Flag para evitar loops de reconexão
 
+function clearRFIDReadings(options = {}) {
+  const { emit = true } = options;
+  rfidReadings = [];
+  rfidTotalReadings = 0;
+  if (emit && io) {
+    io.emit('readings-update', {
+      readings: [],
+      totalReadings: 0
+    });
+  }
+}
+
 // Conectar ao leitor RFID UR4
 async function connectToRFIDReader() {
   if (!chainwayApi) {
@@ -368,6 +496,14 @@ async function connectToRFIDReader() {
     await chainwayApi.connect(rfidConfig.ip, rfidConfig.port);
     rfidConnected = true;
     rfidReconnecting = false;
+
+    if (rfidConfig.power !== undefined) {
+      await applyRFIDPowerSetting(rfidConfig.power, {
+        allowReconnect: false,
+        manageReadingState: false,
+        antennas: rfidConfig.antennas
+      });
+    }
 
     if (!rfidReceiverAttached) {
       chainwayApi.received((data) => {
@@ -435,6 +571,7 @@ async function startRFIDReading() {
   }
   
   try {
+    clearRFIDReadings();
     await chainwayApi.startScan();
     rfidReading = true;
     console.log('✅ [RFID] Leitura iniciada');
@@ -460,8 +597,10 @@ async function stopRFIDReading() {
     rfidReading = false;
     console.log('✅ [RFID] Leitura parada');
     io.emit('reading-status', { isReading: false });
+    clearRFIDReadings();
   } catch (error) {
     console.error('❌ [RFID] Erro ao parar leitura:', error.message || error);
+    clearRFIDReadings();
   }
 }
 
@@ -489,6 +628,7 @@ async function disconnectFromRFIDReader() {
     rfidConnected = false;
     rfidReceiverAttached = false;
     rfidReconnecting = false;
+    clearRFIDReadings();
     
     console.log('✅ [RFID] Desconectado do leitor');
     io.emit('connection-status', { 
@@ -502,6 +642,7 @@ async function disconnectFromRFIDReader() {
     rfidConnected = false;
     rfidReceiverAttached = false;
     rfidReconnecting = false;
+    clearRFIDReadings();
     io.emit('connection-status', { 
       isConnected: false,
       isReading: false,
@@ -566,9 +707,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('clear-readings', () => {
-    rfidReadings = [];
-    rfidTotalReadings = 0;
-    io.emit('readings-update', { readings: [], totalReadings: 0 });
+    clearRFIDReadings();
     console.log('🧹 [RFID] Leituras limpas');
   });
 
@@ -610,9 +749,15 @@ app.post('/rfid/ur4/config', async (req, res) => {
     const oldPower = rfidConfig.power;
     
     if (host && host !== rfidConfig.ip) {
+      if (!isValidIPv4(host)) {
+        return res.status(400).json({
+          success: false,
+          message: `Endereço IP inválido: ${host}`
+        });
+      }
       configChanged.ip = true;
-      rfidConfig.ip = host;
-      console.log(`📝 [RFID] IP atualizado de ${oldIp} para: ${host}`);
+      rfidConfig.ip = host.trim();
+      console.log(`📝 [RFID] IP atualizado de ${oldIp} para: ${rfidConfig.ip}`);
     }
     if (port !== undefined && port !== rfidConfig.port) {
       configChanged.port = true;
@@ -624,17 +769,20 @@ app.post('/rfid/ur4/config', async (req, res) => {
       rfidConfig.power = power;
       console.log(`📝 [RFID] Potência atualizada de ${oldPower} para: ${power}`);
     }
-    if (antennas && JSON.stringify(antennas) !== JSON.stringify(rfidConfig.antennas)) {
-      configChanged.antennas = true;
-      rfidConfig.antennas = antennas;
-      console.log(`📝 [RFID] Antenas atualizadas para: ${antennas.join(', ')}`);
+    if (antennas) {
+      const sanitizedAntennas = sanitizeAntennaList(antennas);
+      if (JSON.stringify(sanitizedAntennas) !== JSON.stringify(rfidConfig.antennas)) {
+        configChanged.antennas = true;
+        rfidConfig.antennas = sanitizedAntennas;
+        console.log(`📝 [RFID] Antenas atualizadas para: ${sanitizedAntennas.join(', ')}`);
+      }
     }
     
     if (configChanged.ip || configChanged.port || configChanged.power || configChanged.antennas) {
       saveRFIDConfig();
     }
     
-    // Se já estiver conectado E a configuração mudou, desconectar e reconectar
+    // Se já estiver conectado e apenas IP/porta mudaram, reconectar
     if (rfidConnected && (configChanged.ip || configChanged.port)) {
       console.log(`🔄 [RFID] Configuração de conexão mudou, reconectando...`);
       console.log(`   IP: ${oldIp} → ${rfidConfig.ip}`);
@@ -659,6 +807,18 @@ app.post('/rfid/ur4/config', async (req, res) => {
         console.error(`❌ [RFID] Erro ao reconectar: ${error.message}`);
         // Não relançar o erro para não quebrar a atualização da configuração
         // O usuário pode tentar conectar manualmente depois
+      }
+    }
+
+    // Reaplicar potência/antenas se houver alterações e o leitor estiver conectado
+    if (rfidConnected && (configChanged.power || configChanged.antennas)) {
+      const applied = await applyRFIDPowerSetting(rfidConfig.power, {
+        allowReconnect: true,
+        manageReadingState: true,
+        antennas: rfidConfig.antennas
+      });
+      if (!applied) {
+        console.warn('⚠️ [RFID] Não foi possível aplicar nova potência/antenas imediatamente.');
       }
     }
     
