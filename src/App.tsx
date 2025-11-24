@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigation } from './hooks/useNavigation';
 import { DashboardScreen } from './components/screens/DashboardScreen';
 import { WeighingScreen } from './components/screens/WeighingScreen';
@@ -7,9 +7,20 @@ import { SettingsScreen } from './components/screens/SettingsScreen';
 import { RfidOperationsScreen } from './components/screens/RfidOperationsScreen';
 import { ReceptionScreen } from './components/screens/ReceptionScreen';
 import { User } from './types';
+import { syncManager } from './services/syncManager';
 
 function App() {
   const { currentScreen, user, navigateTo, goBack, logout } = useNavigation();
+
+  // Iniciar SyncManager ao montar o app
+  useEffect(() => {
+    console.log('🚀 Iniciando SyncManager...');
+    syncManager.start();
+
+    return () => {
+      syncManager.stop();
+    };
+  }, []);
 
   // Mock user - always logged in
   const mockUser: User = {

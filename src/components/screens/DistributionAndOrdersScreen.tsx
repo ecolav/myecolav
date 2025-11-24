@@ -5,6 +5,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useSectors } from '../../hooks/useSectors';
 import { useRequests } from '../../hooks/useRequests';
 import { useRFIDReader } from '../../hooks/useRFIDReader';
+import { useOfflineRFID } from '../../hooks/useOfflineRFID';
 import { API_CONFIG } from '../../config/api';
 
 interface Props {
@@ -33,6 +34,9 @@ type DistributionView = 'modeSelection' | 'sectorSelection';
 export function DistributionAndOrdersScreen({ onBack, selectedClient }: Props) {
   const { settings } = useSettings();
   const clientId = selectedClient?.id || settings.totem.clientId;
+  
+  // Hook para cache offline
+  const { lookupTag: lookupTagOffline, queueOperation } = useOfflineRFID();
   
   // Hook para leitura real do UR4
   const {

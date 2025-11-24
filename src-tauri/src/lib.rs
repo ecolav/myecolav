@@ -2,6 +2,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::State;
 
+mod db;
+mod commands;
+
+use db::Database;
+
 // Estado global para armazenar o último peso lido
 struct ScaleState {
     last_weight: Arc<Mutex<f64>>,
@@ -60,12 +65,39 @@ pub fn run() {
   // Servidor será iniciado pelo launcher (ecolav-completo)
   // Não iniciar automaticamente aqui para evitar conflitos de caminho
   
+  // Inicializar banco de dados SQLite
+  let app_data_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
+    .unwrap_or_else(|| std::env::current_dir().unwrap().join(".data"));
+  
+  std::fs::create_dir_all(&app_data_dir).ok();
+  let db_path = app_data_dir.join("ecolav.db");
+  
+  let database = Database::new(db_path)
+    .expect("Falha ao inicializar banco de dados SQLite");
+  
+  println!("✅ Banco de dados SQLite inicializado");
+  
   tauri::Builder::default()
     .manage(ScaleState {
         last_weight: Arc::new(Mutex::new(0.0)),
         connected: Arc::new(Mutex::new(false)),
     })
-    .invoke_handler(tauri::generate_handler![read_scale_weight, start_scale_reader])
+    .manage(database)
+    .invoke_handler(tauri::generate_handler![
+        read_scale_weight, 
+        start_scale_reader,
+        commands::lookup_rfid_local,
+        commands::cache_rfid_item,
+        commands::bulk_cache_rfid_items,
+        commands::queue_operation,
+        commands::get_pending_operations,
+        commands::delete_operation,
+        commands::increment_retry_count,
+        commands::get_pending_count,
+        commands::get_last_sync,
+        commands::update_sync_log,
+        commands::get_db_stats,
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

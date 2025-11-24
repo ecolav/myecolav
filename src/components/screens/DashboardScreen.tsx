@@ -21,6 +21,7 @@ import EcolavLogo from '../ui/EcolavLogo';
 import { User } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
 import { useClients } from '../../hooks/useClients';
+import { SyncStatusIndicator } from '../SyncStatusIndicator';
 
 interface DashboardScreenProps {
   user: User;
@@ -128,7 +129,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           </div>
           
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             {/* Totem Type Status */}
             <div className={`flex items-center gap-3 rounded-full px-4 py-2 ${
               settings.totem.type === 'clean' 
@@ -143,22 +144,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </span>
             </div>
             
-            {/* Connection Status */}
-            <div className="flex items-center gap-3 bg-white/60 rounded-full px-4 py-2">
-              {isOnline ? (
-                <>
-                  <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <Wifi className="text-emerald-600" size={20} />
-                  <span className="text-sm font-semibold text-emerald-700">Online</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <WifiOff className="text-red-600" size={20} />
-                  <span className="text-sm font-semibold text-red-700">Offline</span>
-                </>
-              )}
-            </div>
+            {/* Sync Status Indicator */}
+            <SyncStatusIndicator />
           </div>
         </div>
       </header>
