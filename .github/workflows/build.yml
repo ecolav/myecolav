@@ -57,13 +57,16 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: npm run tauri:build -- --bundles deb
 
-      - name: Package unified installer (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: npm run installer:package
-
       - name: Build Tauri bundle (Windows & macOS)
         if: matrix.platform != 'ubuntu-22.04'
         run: npm run tauri:build
+
+      - name: Package desktop payload
+        run: npm run installer:package
+        env:
+          INSTALLER_PLATFORM: ${{ matrix.platform }}
+          INSTALLER_ARCH: ${{ runner.arch }}
+          INSTALLER_ARCHIVE_NAME: ${{ format('ecolav-desktop-{0}-{1}.zip', matrix.platform, runner.arch) }}
 
       - name: Upload bundle artifacts
         uses: actions/upload-artifact@v4
@@ -71,10 +74,8 @@ jobs:
           name: tauri-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/**
-
-      - name: Upload backend installer (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Upload desktop payload
         uses: actions/upload-artifact@v4
         with:
-          name: installer-linux
-          path: dist/installers/ecolav-instalador-linux.zip
+          name: desktop-payload-${{ matrix.platform }}
+          path: dist/installers/${{ format('ecolav-desktop-{0}-{1}.zip', matrix.platform, runner.arch) }}
