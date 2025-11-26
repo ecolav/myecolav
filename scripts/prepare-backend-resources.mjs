@@ -149,7 +149,13 @@ async function main() {
   }
 
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  await run(npmCommand, ['ci', '--omit=dev'], { cwd: RESOURCE_BACKEND_DIR });
+  // No Windows, usar 'npm install --production' que é mais compatível
+  // Em outras plataformas, usar 'npm ci --omit=dev' para instalação mais rápida e determinística
+  const npmArgs = process.platform === 'win32' 
+    ? ['install', '--production']
+    : ['ci', '--omit=dev'];
+  
+  await run(npmCommand, npmArgs, { cwd: RESOURCE_BACKEND_DIR });
 
   const hash = await computeBundleHash(RESOURCE_BACKEND_DIR);
   const meta = {
