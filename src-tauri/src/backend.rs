@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use walkdir::WalkDir;
 
 const BACKEND_META_FILE: &str = ".bundle-meta.json";
@@ -118,7 +118,7 @@ fn backend_worker(app_handle: AppHandle, rx: Receiver<BackendCommand>) {
                             let _ = child.kill();
                             let _ = child.wait();
                             emit_status(&app_handle, "stopped", Some("Backend encerrado".into()));
-                            return;
+                            break;
                         }
                         Err(RecvTimeoutError::Timeout) => match child.try_wait() {
                             Ok(Some(status)) => {
@@ -150,7 +150,7 @@ fn backend_worker(app_handle: AppHandle, rx: Receiver<BackendCommand>) {
                 }
 
                 if shutdown_requested {
-                    break;
+                    return;
                 }
 
                 thread::sleep(Duration::from_secs(2));

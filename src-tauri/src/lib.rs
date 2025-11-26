@@ -94,11 +94,11 @@ pub fn run() {
         })
         .manage(database)
         .manage(BackendController::default())
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(not(debug_assertions))]
             {
-                let handle = app.handle();
-                let controller = app.state::<BackendController>();
+                let handle = _app.handle();
+                let controller = _app.state::<BackendController>();
                 controller.start(&handle);
             }
             Ok(())
