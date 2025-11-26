@@ -42,7 +42,9 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup2.4-dev \
-            pkg-config
+            pkg-config \
+            rsync \
+            zip
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
 
       - name: Install project dependencies
@@ -55,6 +57,10 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: npm run tauri:build -- --bundles deb
 
+      - name: Package unified installer (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: npm run installer:package
+
       - name: Build Tauri bundle (Windows & macOS)
         if: matrix.platform != 'ubuntu-22.04'
         run: npm run tauri:build
@@ -65,3 +71,10 @@ jobs:
           name: tauri-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/**
+
+      - name: Upload backend installer (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: dist/installers/ecolav-instalador-linux.zip

@@ -11,6 +11,7 @@
     "server": "npm run scale:server",
     "scale:server": "node scale-server.cjs",
     "scale:server:custom": "node scale-server.cjs",
+    "installer:package": "bash scripts/package-installer.sh",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

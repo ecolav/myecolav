@@ -27,6 +27,9 @@ echo "📁 [2/7] Criando diretório do servidor..."
 sudo mkdir -p /opt/ecolav-server
 sudo cp scale-server.cjs /opt/ecolav-server/
 sudo cp package.json /opt/ecolav-server/
+sudo rm -rf /opt/ecolav-server/chainway-rfid
+sudo cp -R chainway-rfid /opt/ecolav-server/
+sudo cp rfid-config.json /opt/ecolav-server/
 
 # 3. Instalar dependências Node
 echo "📦 [3/7] Instalando dependências Node (pode demorar 1-2 min)..."
