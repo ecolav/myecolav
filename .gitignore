@@ -9,6 +9,7 @@ yarn-error.log*
 .cache/
 .vite/
 src-tauri/target/
+src-tauri/resources/backend/
 Cargo.lock
 .DS_Store
 Thumbs.db

@@ -21,6 +21,7 @@ tauri = { version = "1.6", features = ["http-all", "shell-open", "window-close",
 rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["full"] }
+walkdir = "2.5"
 
 [features]
 default = ["custom-protocol"]

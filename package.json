@@ -8,6 +8,7 @@
     "dev:all": "concurrently -k \"npm run dev\" \"npm run scale:server\"",
     "desktop": "concurrently -k -s first \"npm run scale:server\" \"npm run tauri:dev\"",
     "desktop:build": "concurrently -k -s first \"npm run scale:server\" \"npm run tauri:build\"",
+    "backend:bundle": "node ./scripts/prepare-backend-resources.mjs",
     "server": "npm run scale:server",
     "scale:server": "node scale-server.cjs",
     "scale:server:custom": "node scale-server.cjs",
