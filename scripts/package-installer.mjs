@@ -57,7 +57,10 @@ async function copyDirectory(source, destination) {
 }
 
 function run(command, args, options = {}) {
-  const cmd = process.platform === 'win32' ? `${command}.cmd` : command;
+  const cmd =
+    process.platform === 'win32' && !command.endsWith('.cmd') && !command.endsWith('.exe')
+      ? `${command}.cmd`
+      : command;
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       stdio: 'inherit',
@@ -136,8 +139,7 @@ Passos recomendados:
 
   await fs.promises.rm(ARCHIVE_PATH, { force: true });
 
-  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  await run(npx, ['bestzip', ARCHIVE_PATH, '.'], { cwd: BUILD_DIR });
+  await run('npx', ['bestzip', ARCHIVE_PATH, '.'], { cwd: BUILD_DIR });
 
   console.log(`✅ Pacote gerado em ${ARCHIVE_PATH}`);
 }
