@@ -25,7 +25,7 @@ enum BackendCommand {
     Shutdown,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct BackendStatus {
     state: &'static str,
     message: Option<String>,
